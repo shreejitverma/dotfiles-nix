@@ -8,7 +8,10 @@
 
   homebrew = {
     enable = true;
-    onActivation.cleanup = "zap";
+    # "none" leaves packages you installed manually with `brew` alone.
+    # Use "uninstall" or "zap" only once your Brewfile below is the full
+    # source of truth, or it will remove anything not listed here.
+    onActivation.cleanup = "none";
     taps = [ ];
     brews = [
       "autoconf"

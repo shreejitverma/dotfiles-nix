@@ -123,7 +123,7 @@ fi
 
 # Install Nix via Determinate if missing
 if ! command -v nix &> /dev/null; then
-  curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.sh/nix | sh -s -- install
+  curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
 fi
 
 # Install Homebrew if missing

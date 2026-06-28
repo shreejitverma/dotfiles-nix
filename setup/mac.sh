@@ -15,12 +15,19 @@ fi
 
 # Install Nix via Determinate if missing
 if ! command -v nix &> /dev/null; then
-  curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.sh/nix | sh -s -- install
+  curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
 fi
 
 # Install Homebrew if missing
 if ! command -v brew &> /dev/null; then
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+fi
+
+# Generate the flake lock as the current user first, so the sudo rebuild
+# below doesn't create a root-owned flake.lock inside your repo.
+if [ ! -f "$DOTFILES_DIR/flake.lock" ]; then
+  nix --extra-experimental-features 'nix-command flakes' \
+    flake lock "$DOTFILES_DIR"
 fi
 
 # Apply the Nix configuration
