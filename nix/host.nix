@@ -23,9 +23,9 @@
     starship
   ];
 
-  system.primaryUser = "yourname";
-  users.users.yourname = {
-    home = "/Users/yourname";
+  system.primaryUser = "shreejitverma";
+  users.users.shreejitverma = {
+    home = "/Users/shreejitverma";
     shell = pkgs.zsh;
   };
 
@@ -56,7 +56,7 @@
 
   environment.systemPath = [
     "/run/current-system/sw/bin"
-    "/etc/profiles/per-user/yourname/bin"
+    "/etc/profiles/per-user/shreejitverma/bin"
   ];
 
   system.stateVersion = 6;

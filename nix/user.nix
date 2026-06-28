@@ -4,8 +4,8 @@ let
   dotfilesDir = "${config.home.homeDirectory}/github/dotfiles-mac-nix";
 in
 {
-  home.username = "yourname";
-  home.homeDirectory = "/Users/yourname";
+  home.username = "shreejitverma";
+  home.homeDirectory = "/Users/shreejitverma";
   home.stateVersion = "23.11";
   home.language.base = "en_US.UTF-8";
 
@@ -44,8 +44,8 @@ in
     signing.format = null;
     settings = {
       user = {
-        name = "Your Name";
-        email = "you@example.com";
+        name = "Shreejit Verma";
+        email = "shreejitverma@gmail.com";
       };
       core.editor = "vim";
       color.ui = true;
