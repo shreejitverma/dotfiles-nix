@@ -58,6 +58,8 @@
   };
 
   environment.systemPath = [
+    "/opt/homebrew/bin"
+    "/opt/homebrew/sbin"
     "/run/current-system/sw/bin"
     "/etc/profiles/per-user/shreejitverma/bin"
   ];

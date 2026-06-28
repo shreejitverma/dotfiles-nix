@@ -38,6 +38,11 @@ in
     EDITOR = "vim";
   };
 
+  # Keep user-local binaries (e.g. the Claude CLI) on PATH.
+  home.sessionPath = [
+    "$HOME/.local/bin"
+  ];
+
   programs.git = {
     enable = true;
     lfs.enable = true;
