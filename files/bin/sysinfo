@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# sysinfo: a fast, dense snapshot of the machine for an IC at a glance.
+set -euo pipefail
+
+have() { command -v "$1" >/dev/null 2>&1; }
+hr() { printf '\033[2m%s\033[0m\n' "----------------------------------------"; }
+
+if have fastfetch; then fastfetch; else uname -a; fi
+
+hr; printf '\033[1mDisk\033[0m\n'
+if have duf; then duf --only local; else df -h /; fi
+
+hr; printf '\033[1mTop memory\033[0m\n'
+ps -A -o rss,comm | awk 'NR>1 {a[$2]+=$1} END {for (c in a) print a[c], c}' \
+  | sort -rn | head -5 | awk '{printf "  %6.1f MB  %s\n", $1/1024, $2}'
+
+hr; printf '\033[1mNetwork\033[0m\n'
+printf '  local : %s\n' "$(ipconfig getifaddr en0 2>/dev/null || echo 'n/a')"
+printf '  public: %s\n' "$(curl -fsSL --max-time 3 https://ifconfig.me 2>/dev/null || echo 'n/a')"
+
+hr; printf '\033[1mListening ports\033[0m\n'
+lsof -iTCP -sTCP:LISTEN -nP 2>/dev/null | awk 'NR>1 {print "  " $1, $9}' | sort -u | head -15

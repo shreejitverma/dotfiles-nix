@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# note: append a timestamped line to ~/notes/inbox.md, or open the inbox.
+# Usage:
+#   note something I want to remember     # append a note
+#   note                                  # open the inbox in $EDITOR
+set -euo pipefail
+
+dir="$HOME/notes"
+inbox="$dir/inbox.md"
+mkdir -p "$dir"
+[ -f "$inbox" ] || printf '# Inbox\n\n' > "$inbox"
+
+if [ "$#" -eq 0 ]; then
+  exec "${EDITOR:-nvim}" "$inbox"
+fi
+
+printf -- '- [%s] %s\n' "$(date +'%Y-%m-%d %H:%M')" "$*" >> "$inbox"
+echo "noted -> $inbox"

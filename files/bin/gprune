@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# gprune: delete local git branches already merged into the base branch.
+# Safe by default: prints what it would delete and asks before acting.
+# Usage: gprune [base]   (base defaults to main, then master)
+set -euo pipefail
+
+git rev-parse --is-inside-work-tree >/dev/null 2>&1 || {
+  echo "gprune: not inside a git repository" >&2; exit 1; }
+
+base="${1:-}"
+if [ -z "$base" ]; then
+  if git show-ref --verify --quiet refs/heads/main; then base=main
+  elif git show-ref --verify --quiet refs/heads/master; then base=master
+  else echo "gprune: could not find main or master; pass a base branch" >&2; exit 1; fi
+fi
+
+git fetch --all --prune --quiet
+
+current=$(git symbolic-ref --short HEAD 2>/dev/null || echo "")
+mapfile -t merged < <(git branch --merged "$base" \
+  | sed 's/^[* ]*//' \
+  | grep -vE "^(${base}|${current})$" || true)
+
+if [ "${#merged[@]}" -eq 0 ]; then
+  echo "gprune: no merged branches to delete (base: $base)"
+  exit 0
+fi
+
+echo "Branches merged into '$base' that will be deleted:"
+printf '  %s\n' "${merged[@]}"
+printf 'Delete these %d branch(es)? [y/N] ' "${#merged[@]}"
+read -r reply
+case "$reply" in
+  y|Y) for b in "${merged[@]}"; do git branch -d "$b"; done ;;
+  *)   echo "gprune: aborted." ;;
+esac

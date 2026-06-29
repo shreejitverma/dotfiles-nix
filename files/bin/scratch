@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# scratch: open a dated scratch file for quick thinking, kept under ~/scratch.
+# Usage: scratch [name] [ext]   (default: today's date, .md)
+set -euo pipefail
+
+dir="$HOME/scratch"
+mkdir -p "$dir"
+
+name="${1:-$(date +%Y-%m-%d)}"
+ext="${2:-md}"
+file="$dir/${name}.${ext}"
+
+if [ ! -f "$file" ]; then
+  printf '# %s\n\n' "$name" > "$file"
+fi
+
+exec "${EDITOR:-nvim}" "$file"

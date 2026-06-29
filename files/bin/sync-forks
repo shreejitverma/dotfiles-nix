@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# sync-forks: weekly sync of forked tooling with their upstream parents.
+#
+# For each fork it:
+#   1. fetches upstream and origin,
+#   2. merges upstream/main into your fork's main (keeping your changes),
+#   3. pushes your fork to origin,
+#   4. rebuilds/reinstalls the tool so the update takes effect.
+#
+# Safe by design: skips repos with uncommitted changes, aborts on merge
+# conflict and notifies you, and never force-pushes. Run with --dry-run to
+# only report how far behind upstream each fork is.
+set -uo pipefail
+
+# Tools must be found under launchd's minimal environment.
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/run/current-system/sw/bin:/etc/profiles/per-user/$USER/bin:$HOME/go/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+GH_ROOT="$HOME/github"
+LOG="$HOME/Library/Logs/sync-forks.log"
+REPOS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi"
+mkdir -p "$(dirname "$LOG")"
+
+DRY=0
+[ "${1:-}" = "--dry-run" ] && DRY=1
+
+log()    { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG"; }
+notify() { osascript -e "display notification \"$2\" with title \"$1\"" >/dev/null 2>&1 || true; }
+
+rebuild_tool() {
+  case "$1" in
+    no-mistakes) ( cd "$GH_ROOT/no-mistakes" && make build >>"$LOG" 2>&1 \
+                   && install -m755 bin/no-mistakes "$HOME/.local/bin/no-mistakes" ) \
+                 && log "  rebuilt no-mistakes" || log "  rebuild no-mistakes FAILED" ;;
+    treehouse)   ( cd "$GH_ROOT/treehouse" && make build >>"$LOG" 2>&1 \
+                   && install -m755 treehouse "$HOME/.local/bin/treehouse" ) \
+                 && log "  rebuilt treehouse" || log "  rebuild treehouse FAILED" ;;
+    gnhf)        ( cd "$GH_ROOT/gnhf" && pnpm install --frozen-lockfile >>"$LOG" 2>&1 \
+                   && pnpm run build >>"$LOG" 2>&1 ) \
+                 && log "  rebuilt gnhf" || log "  rebuild gnhf FAILED" ;;
+    lavish-axi)  ( cd "$GH_ROOT/lavish-axi" && pnpm install --frozen-lockfile >>"$LOG" 2>&1 \
+                   && pnpm run build >>"$LOG" 2>&1 ) \
+                 && log "  rebuilt lavish-axi" || log "  rebuild lavish-axi FAILED" ;;
+    chrome-devtools-axi) ( cd "$GH_ROOT/chrome-devtools-axi" && pnpm install --frozen-lockfile >>"$LOG" 2>&1 \
+                   && pnpm run build >>"$LOG" 2>&1 ) \
+                 && log "  rebuilt chrome-devtools-axi" || log "  rebuild chrome-devtools-axi FAILED" ;;
+    firstmate)   : ;;  # pure shell, nothing to build
+    axi)         : ;;  # skill + SDK source, no daily-use binary to build
+  esac
+}
+
+synced="" conflicts="" skipped=""
+
+log "===== sync-forks start (dry-run=$DRY) ====="
+for r in $REPOS; do
+  d="$GH_ROOT/$r"
+  [ -d "$d/.git" ] || { log "[$r] not cloned, skip"; skipped="$skipped $r"; continue; }
+  cd "$d" || continue
+
+  git fetch --quiet --all --prune 2>>"$LOG" || { log "[$r] fetch failed"; continue; }
+
+  branch=main
+  git show-ref --verify --quiet "refs/heads/$branch" || branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo main)
+
+  if [ -n "$(git status --porcelain)" ]; then
+    log "[$r] working tree dirty -> skipping merge; pushing committed work only"
+    [ "$DRY" -eq 0 ] && { git push -q origin "$branch" 2>>"$LOG" && log "[$r] pushed committed work"; }
+    skipped="$skipped $r"
+    continue
+  fi
+
+  git checkout -q "$branch" 2>>"$LOG" || { log "[$r] checkout $branch failed"; continue; }
+  behind=$(git rev-list --count "$branch..upstream/$branch" 2>/dev/null || echo 0)
+
+  if [ "$DRY" -eq 1 ]; then
+    log "[$r] $behind commit(s) behind upstream/$branch"
+    continue
+  fi
+
+  if [ "$behind" -gt 0 ]; then
+    if git merge --no-edit "upstream/$branch" >>"$LOG" 2>&1; then
+      log "[$r] merged $behind upstream commit(s)"
+      rebuild_tool "$r"
+    else
+      git merge --abort 2>>"$LOG" || true
+      log "[$r] MERGE CONFLICT with upstream/$branch -> aborted, left untouched"
+      conflicts="$conflicts $r"
+      continue
+    fi
+  else
+    log "[$r] already up to date with upstream"
+  fi
+
+  if git push -q origin "$branch" 2>>"$LOG"; then
+    log "[$r] pushed to origin"
+    synced="$synced $r"
+  else
+    log "[$r] push to origin FAILED (auth/network?)"
+  fi
+done
+
+log "===== done. synced:[$synced ] conflicts:[$conflicts ] skipped:[$skipped ] ====="
+if [ -n "$conflicts" ]; then
+  notify "sync-forks: conflicts" "Manual merge needed:$conflicts"
+else
+  notify "sync-forks complete" "Synced:${synced:- up-to-date}"
+fi

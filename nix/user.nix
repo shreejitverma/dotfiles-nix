@@ -24,6 +24,21 @@ in
     rustup
     zip
     unzip
+
+    # IC workflow CLI tools.
+    # eza, zoxide, delta, atuin, bat, fzf are installed by the programs.* modules below.
+    just
+    dust
+    duf
+    procs
+    sd
+    btop
+    tokei
+    tealdeer
+    uv
+    ruff
+    difftastic
+
     nerd-fonts.hack
     roboto
     noto-fonts
@@ -38,9 +53,10 @@ in
     EDITOR = "vim";
   };
 
-  # Keep user-local binaries (e.g. the Claude CLI) on PATH.
+  # Keep user-local binaries (e.g. the Claude CLI) and repo scripts on PATH.
   home.sessionPath = [
     "$HOME/.local/bin"
+    "${dotfilesDir}/files/bin"
   ];
 
   programs.git = {
@@ -57,6 +73,23 @@ in
       push.autoSetupRemote = true;
       pull.rebase = true;
       rebase.updateRefs = true;
+      init.defaultBranch = "main";
+      merge.conflictStyle = "zdiff3";
+      diff.algorithm = "histogram";
+      diff.colorMoved = "default";
+      fetch.prune = true;
+      rerere.enabled = true;
+    };
+  };
+
+  programs.delta = {
+    enable = true;
+    enableGitIntegration = true;
+    options = {
+      navigate = true;
+      line-numbers = true;
+      side-by-side = false;
+      syntax-theme = "TwoDark";
     };
   };
 
@@ -103,6 +136,44 @@ in
     };
   };
 
+  # Modern CLI tools with first-class zsh integration, wired reproducibly.
+  programs.eza.enable = true;
+
+  programs.bat = {
+    enable = true;
+    config = {
+      theme = "TwoDark";
+      style = "numbers,changes,header";
+    };
+  };
+
+  programs.fzf = {
+    enable = true;
+    enableZshIntegration = true;
+    defaultCommand = "fd --type f --hidden --follow --exclude .git";
+    defaultOptions = [ "--height 60%" "--layout=reverse" "--border" "--info=inline" ];
+    fileWidgetCommand = "fd --type f --hidden --follow --exclude .git";
+    fileWidgetOptions = [ "--preview 'bat --style=numbers --color=always {} 2>/dev/null || cat {}'" ];
+    changeDirWidgetCommand = "fd --type d --hidden --follow --exclude .git";
+    changeDirWidgetOptions = [ "--preview 'eza --tree --level=2 --color=always {} 2>/dev/null || ls {}'" ];
+  };
+
+  programs.zoxide = {
+    enable = true;
+    enableZshIntegration = true;
+  };
+
+  programs.atuin = {
+    enable = true;
+    enableZshIntegration = true;
+    flags = [ "--disable-up-arrow" ];
+  };
+
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+  };
+
   programs.zsh = {
     enable = true;
     autosuggestion.enable = true;
@@ -123,7 +194,28 @@ in
     };
     initContent = ''
       bindkey '^f' autosuggest-accept
+
+      # IC workflow: exhaustive aliases, functions, and shell options.
+      # Kept in the repo so it can be edited without a full rebuild.
+      [ -f "${dotfilesDir}/files/zsh/ic-workflow.zsh" ] && source "${dotfilesDir}/files/zsh/ic-workflow.zsh"
     '';
+  };
+
+  # Weekly sync of forked tooling (~/github/*) with their upstream parents.
+  # Runs Sundays at 10:00. The script merges upstream, pushes your fork, and
+  # rebuilds the tools. Logs land in ~/Library/Logs/sync-forks*.log.
+  launchd.agents.sync-forks = {
+    enable = true;
+    config = {
+      ProgramArguments = [ "${dotfilesDir}/files/bin/sync-forks" ];
+      StartCalendarInterval = [
+        { Weekday = 0; Hour = 10; Minute = 0; }
+      ];
+      StandardOutPath = "${config.home.homeDirectory}/Library/Logs/sync-forks.out.log";
+      StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/sync-forks.err.log";
+      RunAtLoad = false;
+      ProcessType = "Background";
+    };
   };
 
   home.file = {
