@@ -184,13 +184,16 @@ Skills live in the clones and are symlinked twice, so every agent runtime sees t
 ~/.claude/skills/<name>  -> ../../.agents/skills/<name>
 ```
 
+A skill's name does not have to match its repo: `lavish` comes from `lavish-axi`, `stow` (sweep a session for durable knowledge before a context reset) comes from `firstmate`, and `axi` lives under `.agents/skills` inside its repo.
+
 **4. Weekly sync.**
 `files/bin/sync-forks` fetches upstream for every repo in its `REPOS` list, merges `upstream/main` into `main` (keeping local changes; conflicts abort and notify instead of clobbering), pushes the fork, and rebuilds the affected binaries.
 A launchd agent defined in `nix/user.nix` runs it every Sunday at 10:00, logging to `~/Library/Logs/sync-forks*.log`.
 `syncforks` and `syncforks-dry` run it by hand.
 
 **5. Shell ergonomics.**
-`files/zsh/ic-workflow.zsh` wires the tools into the shell: `th` (treehouse), `nm` (no-mistakes), `gn` (gnhf), `cda` (chrome-devtools-axi), `fm` (firstmate), `syncforks`.
+`files/zsh/ic-workflow.zsh` wires the tools into the shell: `th` (treehouse), `nm` (no-mistakes), `gn` (gnhf), `cda` (chrome-devtools-axi), `ta` (tasks-axi), `qa` (quota-axi), `fm` (firstmate), `syncforks`, and `icdoctor`.
+`files/bin/ic-doctor` is the read-only health check for all five layers; run it whenever something feels off or after changing the setup.
 
 ### From scratch: the full setup, step by step
 
@@ -243,8 +246,9 @@ for s in chrome-devtools-axi gh-axi gnhf no-mistakes quota-axi tasks-axi; do
   ln -sfn ~/github/$s/skills/$s ~/.agents/skills/$s
 done
 ln -sfn ~/github/lavish-axi/skills/lavish ~/.agents/skills/lavish
+ln -sfn ~/github/firstmate/skills/stow    ~/.agents/skills/stow
 ln -sfn ~/github/axi/.agents/skills/axi   ~/.agents/skills/axi
-for s in axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi tasks-axi; do
+for s in axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi stow tasks-axi; do
   ln -sfn ../../.agents/skills/$s ~/.claude/skills/$s
 done
 ```
@@ -277,13 +281,42 @@ fm claude   # cd ~/github/firstmate and launch an agent with the crew
 **Step 8: verify everything.**
 
 ```bash
-for t in no-mistakes treehouse gnhf lavish-axi chrome-devtools-axi \
-         gh-axi tasks-axi quota-axi; do
-  printf '%-22s' "$t"; "$t" --version
-done
-quota-axi     # should show live provider quota windows
-ls -la ~/.agents/skills ~/.claude/skills
+ic-doctor
 ```
+
+`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check of all five layers: every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the launchd sync agent and its last log line; and `gh` plus quota-axi auth.
+It exits non-zero if anything needs attention, and every failure line names the command that fixes it.
+A healthy system ends with `ic-doctor: all checks passed`.
+
+### Maintenance: adding a new tool to the rotation
+
+The checklist when adopting the next tool, so it inherits all five layers:
+
+1. Fork, clone, and set the `upstream` remote (Step 2 pattern).
+2. Build and put it on `PATH`: `pnpm install --frozen-lockfile && pnpm run build && npm link` for Node tools, or `make build && install -m755 <bin> ~/.local/bin/<bin>` for Go tools.
+3. Symlink its skill into `~/.agents/skills` and `~/.claude/skills` (Step 5 pattern).
+4. Add the repo to `REPOS` and a rebuild case to `rebuild_tool()` in `files/bin/sync-forks`.
+5. Add it to the `FORKS`, `BINARIES`, and `SKILLS` lists in `files/bin/ic-doctor`.
+6. Optionally add a short alias in `files/zsh/ic-workflow.zsh`.
+7. Run `syncforks-dry` and `ic-doctor` to confirm, then commit the dotfiles change.
+
+### Troubleshooting
+
+- **A Node tool's build fails under `npm install`.**
+  These repos use pnpm; `npm install` against a pnpm `node_modules` fails with errors like `Cannot read properties of null (reading 'matches')`.
+  Always use `pnpm install --frozen-lockfile`.
+- **A binary is on `PATH` but `--version` fails.**
+  The npm link points at a clone whose `dist/` is stale or missing; rebuild the clone (`pnpm run build`) or relink (`npm link`).
+- **quota-axi shows `auth_required` for claude.**
+  Keychain access has not been granted; run `quota-axi --allow-keychain-prompt auth` and click "Always Allow".
+- **sync-forks skipped a repo.**
+  It skips anything with uncommitted changes or a non-`main` branch by design; commit or stash, switch to `main`, and rerun `syncforks`.
+- **sync-forks reported a conflict.**
+  It aborted the merge and left the repo untouched; resolve by hand with `git merge upstream/main` in that clone, keeping your changes.
+- **Where are the sync logs?**
+  `~/Library/Logs/sync-forks.log` (script log) plus `sync-forks.out.log` and `sync-forks.err.log` (launchd streams).
+- **Everything else.**
+  Run `ic-doctor`; each FAIL line names the fix.
 
 ### How the pieces work together day to day
 
@@ -293,6 +326,7 @@ The point of the stack is that each tool owns one phase of the loop.
 - Pull the next piece of work with `tasks-axi ready`, and open an isolated worktree for it with `th` so streams of work never collide.
 - Do the work with agents that carry the axi skills: `gh-axi` for everything GitHub, `cda` for anything that needs a real browser, `lavish` when a plan or review is easier to judge as a rich artifact.
 - Ship through `nm` (no-mistakes), which runs review, tests, lint, docs, push, PR, and CI as one gate, so nothing reaches the remote unvalidated.
+- Before ending a long agent session, invoke the `stow` skill so preferences, project facts, and unfinished next steps land on disk instead of dying with the context window.
 - Before bed, hand the backlog to `gn` (gnhf) for a supervised overnight run, and read the results over coffee.
 - Sunday at 10:00, `sync-forks` merges upstream improvements into every fork, keeps local changes, pushes, and rebuilds, so the whole toolchain stays current without a thought.
 
