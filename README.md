@@ -125,6 +125,177 @@ I wanted a setup that was:
 
 That is why this repo focuses on the reusable core.
 
+## The agent-first IC toolchain
+
+Beyond the base Mac setup, this machine runs an integrated toolchain for working as a single individual contributor with a crew of coding agents.
+Every tool below is a fork of a [kunchenguid](https://github.com/kunchenguid) repo, kept in sync with upstream automatically.
+This section documents how it is wired on my system today, and then gives the exact commands to reproduce the whole setup from scratch.
+
+### The tools
+
+| Tool | What it does | Local artifact |
+|---|---|---|
+| [dotfiles-mac-nix](https://github.com/kunchenguid/dotfiles-mac-nix) | This repo: nix-darwin + Home Manager + Homebrew base system | `rebuild` alias |
+| [axi](https://github.com/kunchenguid/axi) | The 10 AXI principles for agent-ergonomic CLIs, plus the SDK and skill | skill only |
+| [gh-axi](https://github.com/kunchenguid/gh-axi) | GitHub (issues, PRs, CI, releases, Projects) through an agent-ergonomic CLI | `gh-axi` |
+| [tasks-axi](https://github.com/kunchenguid/tasks-axi) | Task and backlog manager for the current workspace, agent-driven | `tasks-axi` |
+| [chrome-devtools-axi](https://github.com/kunchenguid/chrome-devtools-axi) | Real Chrome control for agents: navigate, click, inspect, screenshot, audit | `chrome-devtools-axi` |
+| [lavish-axi](https://github.com/kunchenguid/lavish-axi) | Rich annotatable HTML artifacts from agent output, with a feedback loop | `lavish-axi` |
+| [quota-axi](https://github.com/kunchenguid/quota-axi) | Reports local LLM subscription quota windows so agents can pace spend | `quota-axi` |
+| [no-mistakes](https://github.com/kunchenguid/no-mistakes) | `git push no-mistakes`: review, tests, lint, docs, PR, and CI gate before code ships | `no-mistakes` |
+| [treehouse](https://github.com/kunchenguid/treehouse) | Git worktrees without managing worktrees; one worktree per stream of work | `treehouse` |
+| [firstmate](https://github.com/kunchenguid/firstmate) | Talk to one agent, ship with a crew; agent-of-agents workspace | shell function |
+| [gnhf](https://github.com/kunchenguid/gnhf) | "Good night, have fun": supervised overnight agent coding runs | `gnhf` |
+| [wheelhouse](https://github.com/kunchenguid/wheelhouse) | Cross-repo "what needs my decision" queue on GitHub Issues + Actions | runs on GitHub |
+
+### How it is integrated on this machine
+
+The design has five layers, and each one is owned by exactly one mechanism.
+
+**1. Forks under `~/github`.**
+Every tool is cloned from my fork with the parent repo as `upstream`:
+
+```text
+origin   -> https://github.com/shreejitverma/<repo>.git
+upstream -> https://github.com/kunchenguid/<repo>.git
+```
+
+This is what makes "merge and keep my changes" the default posture: local commits (like wheelhouse's `Configure fleet for shreejitverma`) survive every upstream sync.
+
+**2. Binaries.**
+Go tools are built with `make` and installed to `~/.local/bin`:
+
+- `no-mistakes` from `~/github/no-mistakes` (`make build`, binary at `bin/no-mistakes`)
+- `treehouse` from `~/github/treehouse` (`make build`, binary at `./treehouse`)
+
+Node tools are built with `pnpm` and put on `PATH` with `npm link`, so the linked binary in `/opt/homebrew/bin` always runs the current build of the clone:
+
+- `chrome-devtools-axi`, `gh-axi`, `gnhf`, `lavish-axi`, `quota-axi`, `tasks-axi`
+
+`firstmate` is pure shell and is entered through the `firstmate` function in `files/zsh/ic-workflow.zsh`.
+`axi` ships no daily-use binary; it contributes its skill and SDK source.
+`wheelhouse` runs entirely on GitHub Actions inside the fork; nothing is built locally.
+
+**3. Agent skills.**
+Skills live in the clones and are symlinked twice, so every agent runtime sees the same live copy and a rebuild of a clone updates the skill in place:
+
+```text
+~/.agents/skills/<name>  -> ~/github/<repo>/skills/<name>
+~/.claude/skills/<name>  -> ../../.agents/skills/<name>
+```
+
+**4. Weekly sync.**
+`files/bin/sync-forks` fetches upstream for every repo in its `REPOS` list, merges `upstream/main` into `main` (keeping local changes; conflicts abort and notify instead of clobbering), pushes the fork, and rebuilds the affected binaries.
+A launchd agent defined in `nix/user.nix` runs it every Sunday at 10:00, logging to `~/Library/Logs/sync-forks*.log`.
+`syncforks` and `syncforks-dry` run it by hand.
+
+**5. Shell ergonomics.**
+`files/zsh/ic-workflow.zsh` wires the tools into the shell: `th` (treehouse), `nm` (no-mistakes), `gn` (gnhf), `cda` (chrome-devtools-axi), `fm` (firstmate), `syncforks`.
+
+### From scratch: the full setup, step by step
+
+These are the exact commands to reproduce this system on a new Mac.
+Prerequisite: finish the base setup above (`setup/mac.sh`, then `rebuild`), which provides git, Node via nvm, pnpm, Go, and `gh`.
+
+**Step 1: authenticate GitHub.**
+
+```bash
+gh auth login
+```
+
+**Step 2: fork and clone every tool with an upstream remote.**
+
+```bash
+mkdir -p ~/github ~/.local/bin ~/.agents/skills ~/.claude/skills
+cd ~/github
+me=$(gh api user -q .login)
+for repo in axi chrome-devtools-axi firstmate gh-axi gnhf lavish-axi \
+            no-mistakes quota-axi tasks-axi treehouse wheelhouse; do
+  gh repo fork "kunchenguid/$repo" --clone=false
+  git clone "https://github.com/$me/$repo.git"
+  git -C "$repo" remote add upstream "https://github.com/kunchenguid/$repo.git"
+  git -C "$repo" fetch upstream
+done
+```
+
+**Step 3: build the Go tools into `~/.local/bin`.**
+
+```bash
+cd ~/github/no-mistakes && make build && install -m755 bin/no-mistakes ~/.local/bin/no-mistakes
+cd ~/github/treehouse   && make build && install -m755 treehouse       ~/.local/bin/treehouse
+```
+
+**Step 4: build and link the Node tools.**
+
+```bash
+for repo in chrome-devtools-axi gh-axi gnhf lavish-axi quota-axi tasks-axi; do
+  cd ~/github/$repo
+  pnpm install --frozen-lockfile
+  pnpm run build
+  npm link
+done
+```
+
+**Step 5: symlink the agent skills.**
+
+```bash
+for s in chrome-devtools-axi gh-axi gnhf no-mistakes quota-axi tasks-axi; do
+  ln -sfn ~/github/$s/skills/$s ~/.agents/skills/$s
+done
+ln -sfn ~/github/lavish-axi/skills/lavish ~/.agents/skills/lavish
+ln -sfn ~/github/axi/.agents/skills/axi   ~/.agents/skills/axi
+for s in axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi tasks-axi; do
+  ln -sfn ../../.agents/skills/$s ~/.claude/skills/$s
+done
+```
+
+**Step 6: enable the weekly sync.**
+The script and the launchd agent are already in this repo, so applying the config is enough:
+
+```bash
+rebuild
+syncforks-dry   # verify: every repo should report how far behind upstream it is
+```
+
+**Step 7: one-time per-tool setup.**
+
+quota-axi needs macOS Keychain access once to read live Claude quota (click "Always Allow"):
+
+```bash
+quota-axi --allow-keychain-prompt auth
+```
+
+wheelhouse is configured on GitHub, not locally: commit your fleet of repos to your fork, enable Actions on it, and add the secrets its README lists.
+That fleet-config commit is exactly the kind of local change `sync-forks` preserves.
+
+firstmate runs from inside its workspace; the shell function handles that:
+
+```bash
+fm claude   # cd ~/github/firstmate and launch an agent with the crew
+```
+
+**Step 8: verify everything.**
+
+```bash
+for t in no-mistakes treehouse gnhf lavish-axi chrome-devtools-axi \
+         gh-axi tasks-axi quota-axi; do
+  printf '%-22s' "$t"; "$t" --version
+done
+quota-axi     # should show live provider quota windows
+ls -la ~/.agents/skills ~/.claude/skills
+```
+
+### How the pieces work together day to day
+
+The point of the stack is that each tool owns one phase of the loop.
+
+- Start the day with `quota-axi` to see how much agent headroom the session and week have left, and check the wheelhouse queue on GitHub for decisions other people are waiting on.
+- Pull the next piece of work with `tasks-axi ready`, and open an isolated worktree for it with `th` so streams of work never collide.
+- Do the work with agents that carry the axi skills: `gh-axi` for everything GitHub, `cda` for anything that needs a real browser, `lavish` when a plan or review is easier to judge as a rich artifact.
+- Ship through `nm` (no-mistakes), which runs review, tests, lint, docs, push, PR, and CI as one gate, so nothing reaches the remote unvalidated.
+- Before bed, hand the backlog to `gn` (gnhf) for a supervised overnight run, and read the results over coffee.
+- Sunday at 10:00, `sync-forks` merges upstream improvements into every fork, keeps local changes, pushes, and rebuilds, so the whole toolchain stays current without a thought.
+
 ## Related
 
 - Long-form write-up: [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web)
