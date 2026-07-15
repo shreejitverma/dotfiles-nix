@@ -16,18 +16,14 @@ It gives you a structured starting point for managing a Mac setup in code:
 - install GUI apps and macOS-native tools declaratively with Homebrew
 - keep selected app config in the repo and link it into place
 
-I include [WezTerm](https://wezfurlong.org/wezterm/) as the one concrete app-config example because it is real enough to demonstrate the pattern without dragging in the more personal parts of my workflow.
+App configs kept in the repo and linked into place include [WezTerm](https://wezfurlong.org/wezterm/) and herdr. Neovim config is deliberately not managed here; it lives in its own repo, [kickstart.nvim](https://github.com/shreejitverma/kickstart.nvim), checked out at `~/.config/nvim`.
 
 ## What is intentionally not included
 
 This repo does **not** try to mirror my entire machine.
 
-I left out things that are too personal or too workflow-specific to make a good public starter repo, including:
+I left out things that are too personal to make a good public repo, including:
 
-- editor config
-- custom shell systems
-- personal scripts
-- AI tooling
 - secrets and tokens
 - private automation
 
@@ -39,7 +35,11 @@ The goal is to provide a reusable foundation that you can make your own.
 - `flake.nix` — top-level Nix wiring
 - `nix/host.nix` — machine-level macOS config (nix-darwin)
 - `nix/user.nix` — user environment: packages, shell, git, fonts, dotfiles (Home Manager)
-- `files/.config/wezterm/wezterm.lua` — example app config linked into place
+- `files/.config/wezterm/wezterm.lua` — WezTerm config linked into place
+- `files/.config/herdr/config.toml` — herdr config linked into place
+- `files/bin/` — personal scripts kept on `PATH`
+- `files/zsh/ic-workflow.zsh` — IC workflow shell config sourced by zsh
+- `AGENTS.md` — repo-specific notes for coding agents
 - `blog.md` — local copy of the [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web)
 
 ## How to use it

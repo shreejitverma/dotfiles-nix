@@ -190,6 +190,8 @@ in
       reset = "git reset --soft HEAD^";
       rebasem = "git rebase -i main";
       rebasemst = "git rebase -i master";
+      cc = "claude --dangerously-skip-permissions";
+      co = "codex --full-auto";
       rebuild = "/run/current-system/sw/bin/darwin-rebuild switch --flake ~/github/dotfiles-mac-nix#mac";
     };
     initContent = ''
@@ -220,5 +222,8 @@ in
 
   home.file = {
     ".config/wezterm".source = config.lib.file.mkOutOfStoreSymlink "${dotfilesDir}/files/.config/wezterm";
+    # ~/.config/nvim is deliberately NOT managed here: it is its own git repo
+    # (github.com/shreejitverma/kickstart.nvim) checked out in place.
+    ".config/herdr".source = config.lib.file.mkOutOfStoreSymlink "${dotfilesDir}/files/.config/herdr";
   };
 }
