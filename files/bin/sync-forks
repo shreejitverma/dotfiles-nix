@@ -17,7 +17,7 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/run/current-system/sw/bin:/etc/
 
 GH_ROOT="$HOME/github"
 LOG="$HOME/Library/Logs/sync-forks.log"
-REPOS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi"
+REPOS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi wheelhouse"
 mkdir -p "$(dirname "$LOG")"
 
 DRY=0
@@ -51,6 +51,7 @@ rebuild_tool() {
                  && log "  rebuilt tasks-axi" || log "  rebuild tasks-axi FAILED" ;;
     firstmate)   : ;;  # pure shell, nothing to build
     axi)         : ;;  # skill + SDK source, no daily-use binary to build
+    wheelhouse)  : ;;  # GitHub Actions machine; runs on GitHub, nothing local to build
   esac
 }
 
