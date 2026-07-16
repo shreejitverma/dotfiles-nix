@@ -209,6 +209,18 @@ Other tools reach the same instructions and skills through symlinks:
 So Claude Code, Codex, and anything else that reads `AGENTS.md` all see one set of rules and one set of skills.
 Cursor is not installed on this machine; when it is, point its User Rules at `~/AGENTS.md` (or symlink a project's `.cursor/rules` to it) to join the same system.
 
+The personal layer itself is version controlled in a **private** repo, `~/github/agents`, so nothing exists only as loose files in the home directory:
+
+```text
+~/.claude/CLAUDE.md      -> ~/github/agents/CLAUDE.md
+~/OPINIONS.md            -> ~/github/agents/OPINIONS.md
+~/VOICE.md               -> ~/github/agents/VOICE.md
+~/.claude/settings.json  -> ~/github/agents/claude/settings.json
+```
+
+Edits made through the symlinks land in the repo; commit and push there as usual.
+`files/bin/ic-link` is the idempotent script that creates this entire farm (skills, mirrors, instruction chain, personal layer), and `ic-doctor` verifies it.
+
 ### From scratch: the full setup, step by step
 
 These are the exact commands to reproduce this system on a new Mac.
@@ -253,34 +265,25 @@ for repo in chrome-devtools-axi gh-axi gnhf lavish-axi quota-axi tasks-axi; do
 done
 ```
 
-**Step 5: symlink the agent skills.**
+**Step 5: clone the private personal layer.**
+The agent operating manual (`CLAUDE.md` with its "Default development system" section), `OPINIONS.md`, `VOICE.md`, and Claude settings live in a private repo so they are version controlled without being published:
 
 ```bash
-for s in chrome-devtools-axi gh-axi gnhf no-mistakes quota-axi tasks-axi; do
-  ln -sfn ~/github/$s/skills/$s ~/.agents/skills/$s
-done
-ln -sfn ~/github/lavish-axi/skills/lavish ~/.agents/skills/lavish
-ln -sfn ~/github/firstmate/skills/stow    ~/.agents/skills/stow
-ln -sfn ~/github/axi/.agents/skills/axi   ~/.agents/skills/axi
-ln -sfn ~/github/dotfiles-mac-nix/files/skills/ship ~/.agents/skills/ship
-for s in axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi ship stow tasks-axi; do
-  ln -sfn ../../.agents/skills/$s ~/.claude/skills/$s
-done
+git clone https://github.com/<you>/agents.git ~/github/agents
 ```
 
-**Step 5b: make it the default for every AI tool.**
-Keep the agent operating manual in `~/.claude/CLAUDE.md`, including a "Default development system" section that names these tools as the defaults, and chain the other tools to it:
+If you are reproducing this setup for yourself, create that private repo first with your own `CLAUDE.md`; this repo's `files/skills/ship/SKILL.md` and the layer descriptions above tell you what it needs to contain.
+
+**Step 6: wire every symlink with one command.**
 
 ```bash
-ln -sfn .claude/CLAUDE.md ~/AGENTS.md
-mkdir -p ~/.codex/skills
-ln -sfn ~/AGENTS.md ~/.codex/AGENTS.md
-for s in axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi ship stow tasks-axi; do
-  ln -sfn ../../.agents/skills/$s ~/.codex/skills/$s
-done
+ic-link
 ```
 
-**Step 6: enable the weekly sync.**
+`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills` and `~/.codex/skills`, the `~/AGENTS.md` and `~/.codex/AGENTS.md` chain, and the personal-layer links from `~/github/agents` (skipped with a note if that repo is absent).
+Rerun it any time; it repairs stale links in place.
+
+**Step 7: enable the weekly sync.**
 The script and the launchd agent are already in this repo, so applying the config is enough:
 
 ```bash
@@ -288,7 +291,7 @@ rebuild
 syncforks-dry   # verify: every repo should report how far behind upstream it is
 ```
 
-**Step 7: one-time per-tool setup.**
+**Step 8: one-time per-tool setup.**
 
 quota-axi needs macOS Keychain access once to read live Claude quota (click "Always Allow"):
 
@@ -305,7 +308,7 @@ firstmate runs from inside its workspace; the shell function handles that:
 fm claude   # cd ~/github/firstmate and launch an agent with the crew
 ```
 
-**Step 8: verify everything.**
+**Step 9: verify everything.**
 
 ```bash
 ic-doctor
@@ -321,7 +324,7 @@ The checklist when adopting the next tool, so it inherits all five layers:
 
 1. Fork, clone, and set the `upstream` remote (Step 2 pattern).
 2. Build and put it on `PATH`: `pnpm install --frozen-lockfile && pnpm run build && npm link` for Node tools, or `make build && install -m755 <bin> ~/.local/bin/<bin>` for Go tools.
-3. Symlink its skill into `~/.agents/skills`, `~/.claude/skills`, and `~/.codex/skills` (Step 5 pattern).
+3. Add its skill to `files/bin/ic-link` (both the canonical link and the `ALL_SKILLS` mirror list) and run `ic-link`.
 4. Add the repo to `REPOS` and a rebuild case to `rebuild_tool()` in `files/bin/sync-forks`.
 5. Add it to the `FORKS`, `BINARIES`, and `SKILLS` lists in `files/bin/ic-doctor`.
 6. Optionally add a short alias in `files/zsh/ic-workflow.zsh`.
@@ -342,6 +345,8 @@ The checklist when adopting the next tool, so it inherits all five layers:
   It aborted the merge and left the repo untouched; resolve by hand with `git merge upstream/main` in that clone, keeping your changes.
 - **Where are the sync logs?**
   `~/Library/Logs/sync-forks.log` (script log) plus `sync-forks.out.log` and `sync-forks.err.log` (launchd streams).
+- **A skill or instruction symlink is missing or points somewhere stale.**
+  Run `ic-link`; it recreates the entire farm idempotently.
 - **Everything else.**
   Run `ic-doctor`; each FAIL line names the fix.
 

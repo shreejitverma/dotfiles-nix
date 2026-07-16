@@ -120,6 +120,25 @@ if [ -d "$HOME/.codex" ]; then
 else
   warn "codex not set up (~/.codex absent); skipping"
 fi
+if [ -d "$GH_ROOT/agents" ]; then
+  agents_bad=""
+  for f in "$HOME/.claude/CLAUDE.md" "$HOME/OPINIONS.md" "$HOME/VOICE.md" "$HOME/.claude/settings.json"; do
+    case "$(readlink "$f" 2>/dev/null)" in
+      "$GH_ROOT"/agents/*) ;;
+      *) agents_bad="$agents_bad $f" ;;
+    esac
+  done
+  if [ -n "$agents_bad" ]; then
+    bad "personal layer not linked into ~/github/agents:$agents_bad (run: ic-link)"
+  else
+    ok "personal layer versioned in ~/github/agents"
+  fi
+  if [ -n "$(git -C "$GH_ROOT/agents" status --porcelain 2>/dev/null | head -1)" ]; then
+    warn "agents repo has uncommitted changes (commit and push to keep it versioned)"
+  fi
+else
+  warn "private agents repo not cloned (~/github/agents); personal layer unversioned"
+fi
 
 echo
 if [ "$fail" -eq 0 ]; then

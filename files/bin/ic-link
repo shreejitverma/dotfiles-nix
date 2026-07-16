@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# ic-link: create (or repair) every symlink the agent toolchain depends on.
+#
+# Idempotent: safe to run any time; ln -sfn replaces stale links in place.
+# This is the versioned recipe for the wiring that ic-doctor verifies:
+#   - agent skills into ~/.agents/skills, mirrored to ~/.claude/skills
+#     and ~/.codex/skills
+#   - the cross-tool instruction chain (~/AGENTS.md, ~/.codex/AGENTS.md)
+#   - the personal layer from the private ~/github/agents repo, if present
+set -euo pipefail
+
+GH_ROOT="$HOME/github"
+DOTFILES="$GH_ROOT/dotfiles-mac-nix"
+
+# Skills whose directory name matches their repo name.
+REGULAR_SKILLS="chrome-devtools-axi gh-axi gnhf no-mistakes quota-axi tasks-axi"
+# All skills, for mirroring into per-tool skill directories.
+ALL_SKILLS="axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi ship stow tasks-axi"
+
+mkdir -p "$HOME/.agents/skills" "$HOME/.claude/skills" "$HOME/.codex/skills"
+
+# 1. Canonical skill links: ~/.agents/skills/<name> -> source in a clone.
+for s in $REGULAR_SKILLS; do
+  ln -sfn "$GH_ROOT/$s/skills/$s" "$HOME/.agents/skills/$s"
+done
+ln -sfn "$GH_ROOT/lavish-axi/skills/lavish"  "$HOME/.agents/skills/lavish"
+ln -sfn "$GH_ROOT/firstmate/skills/stow"     "$HOME/.agents/skills/stow"
+ln -sfn "$GH_ROOT/axi/.agents/skills/axi"    "$HOME/.agents/skills/axi"
+ln -sfn "$DOTFILES/files/skills/ship"        "$HOME/.agents/skills/ship"
+
+# 2. Mirrors: every consumer sees the same canonical set.
+for s in $ALL_SKILLS; do
+  ln -sfn "../../.agents/skills/$s" "$HOME/.claude/skills/$s"
+  ln -sfn "../../.agents/skills/$s" "$HOME/.codex/skills/$s"
+done
+
+# 3. Cross-tool instruction chain.
+ln -sfn ".claude/CLAUDE.md" "$HOME/AGENTS.md"
+ln -sfn "$HOME/AGENTS.md"   "$HOME/.codex/AGENTS.md"
+
+# 4. Personal layer from the private agents repo (skipped if not cloned).
+AGENTS_REPO="$GH_ROOT/agents"
+if [ -d "$AGENTS_REPO" ]; then
+  ln -sf "$AGENTS_REPO/CLAUDE.md"            "$HOME/.claude/CLAUDE.md"
+  ln -sf "$AGENTS_REPO/OPINIONS.md"          "$HOME/OPINIONS.md"
+  ln -sf "$AGENTS_REPO/VOICE.md"             "$HOME/VOICE.md"
+  ln -sf "$AGENTS_REPO/claude/settings.json" "$HOME/.claude/settings.json"
+  echo "ic-link: linked skills, cross-tool chain, and personal layer"
+else
+  echo "ic-link: linked skills and cross-tool chain (no $AGENTS_REPO; personal layer skipped)"
+fi
+echo "ic-link: run ic-doctor to verify"
