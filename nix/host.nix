@@ -21,6 +21,7 @@
     casks = [
       "wezterm"
       "amethyst"
+      "opensuperwhisper"
     ];
   };
 
@@ -61,6 +62,14 @@
 
     trackpad = {
       Clicking = true;
+    };
+
+    CustomUserPreferences = {
+      # OpenSuperWhisper: toggle recording with Cmd+` (key code 50 = backtick,
+      # carbon modifier 256 = Command). Restart the app after changing this.
+      "ru.starmel.OpenSuperWhisper" = {
+        KeyboardShortcuts_toggleRecord = ''{"carbonKeyCode":50,"carbonModifiers":256}'';
+      };
     };
   };
 
