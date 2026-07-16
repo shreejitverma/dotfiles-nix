@@ -7,6 +7,7 @@
 #   3. agent skill symlinks (~/.agents/skills and ~/.claude/skills)
 #   4. the weekly sync-forks launchd agent and its last log line
 #   5. auth (gh, quota-axi keychain access)
+#   6. cross-tool defaults (~/AGENTS.md chain, codex AGENTS.md and skills)
 #
 # Read-only: it never mutates anything. Exits non-zero if any check FAILs;
 # warns are informational and do not affect the exit code.
@@ -17,14 +18,14 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/run/current-system/sw/bin:/etc/
 GH_ROOT="$HOME/github"
 FORKS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi wheelhouse quota-axi"
 BINARIES="no-mistakes treehouse gnhf lavish-axi chrome-devtools-axi gh-axi tasks-axi quota-axi"
-SKILLS="axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi stow tasks-axi"
+SKILLS="axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi ship stow tasks-axi"
 
 fail=0
 ok()   { printf '  ok    %s\n' "$*"; }
 warn() { printf '  warn  %s\n' "$*"; }
 bad()  { printf '  FAIL  %s\n' "$*"; fail=1; }
 
-echo "[1/5] forks under $GH_ROOT"
+echo "[1/6] forks under $GH_ROOT"
 for r in $FORKS; do
   d="$GH_ROOT/$r"
   if [ ! -d "$d/.git" ]; then bad "$r: clone missing"; continue; fi
@@ -41,7 +42,7 @@ for r in $FORKS; do
   fi
 done
 
-echo "[2/5] binaries"
+echo "[2/6] binaries"
 for t in $BINARIES; do
   if p=$(command -v "$t" 2>/dev/null); then
     if v=$("$t" --version 2>/dev/null | head -1); then
@@ -54,7 +55,7 @@ for t in $BINARIES; do
   fi
 done
 
-echo "[3/5] agent skills"
+echo "[3/6] agent skills"
 for s in $SKILLS; do
   missing=""
   for base in "$HOME/.agents/skills" "$HOME/.claude/skills"; do
@@ -63,7 +64,7 @@ for s in $SKILLS; do
   if [ -n "$missing" ]; then bad "$s: missing or broken symlink:$missing"; else ok "$s"; fi
 done
 
-echo "[4/5] weekly sync"
+echo "[4/6] weekly sync"
 if launchctl list 2>/dev/null | grep -q "sync-forks"; then
   ok "launchd agent loaded (Sundays 10:00)"
 else
@@ -76,7 +77,7 @@ else
   warn "no sync log yet at $LOG (runs Sundays, or run: syncforks)"
 fi
 
-echo "[5/5] auth"
+echo "[5/6] auth"
 if gh auth status >/dev/null 2>&1; then
   ok "gh authenticated"
 else
@@ -88,6 +89,36 @@ if command -v quota-axi >/dev/null 2>&1; then
   else
     warn "quota-axi cannot read claude quota (run: quota-axi --allow-keychain-prompt auth)"
   fi
+fi
+
+echo "[6/6] cross-tool defaults"
+if [ -f "$HOME/AGENTS.md" ] && [ "$(readlink "$HOME/AGENTS.md")" = ".claude/CLAUDE.md" ]; then
+  ok "~/AGENTS.md -> ~/.claude/CLAUDE.md"
+else
+  bad "~/AGENTS.md is not a symlink to .claude/CLAUDE.md"
+fi
+if grep -q "Default development system" "$HOME/.claude/CLAUDE.md" 2>/dev/null; then
+  ok "CLAUDE.md declares the default development system"
+else
+  bad "CLAUDE.md missing the 'Default development system' section"
+fi
+if [ -d "$HOME/.codex" ]; then
+  if [ -f "$HOME/.codex/AGENTS.md" ]; then
+    ok "codex: ~/.codex/AGENTS.md resolves"
+  else
+    bad "codex: ~/.codex/AGENTS.md missing or broken (ln -sfn ~/AGENTS.md ~/.codex/AGENTS.md)"
+  fi
+  codex_missing=""
+  for s in $SKILLS; do
+    [ -f "$HOME/.codex/skills/$s/SKILL.md" ] || codex_missing="$codex_missing $s"
+  done
+  if [ -n "$codex_missing" ]; then
+    bad "codex: skills missing or broken:$codex_missing"
+  else
+    ok "codex: all skills linked"
+  fi
+else
+  warn "codex not set up (~/.codex absent); skipping"
 fi
 
 echo

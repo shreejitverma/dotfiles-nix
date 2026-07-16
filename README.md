@@ -150,7 +150,7 @@ This section documents how it is wired on my system today, and then gives the ex
 
 ### How it is integrated on this machine
 
-The design has five layers, and each one is owned by exactly one mechanism.
+The design has six layers, and each one is owned by exactly one mechanism.
 
 **1. Forks under `~/github`.**
 Every tool is cloned from my fork with the parent repo as `upstream`:
@@ -185,6 +185,7 @@ Skills live in the clones and are symlinked twice, so every agent runtime sees t
 ```
 
 A skill's name does not have to match its repo: `lavish` comes from `lavish-axi`, `stow` (sweep a session for durable knowledge before a context reset) comes from `firstmate`, and `axi` lives under `.agents/skills` inside its repo.
+One skill is owned by this repo rather than a tool fork: `ship` (`files/skills/ship`), which encodes the end-to-end quality loop below as an invocable skill.
 
 **4. Weekly sync.**
 `files/bin/sync-forks` fetches upstream for every repo in its `REPOS` list, merges `upstream/main` into `main` (keeping local changes; conflicts abort and notify instead of clobbering), pushes the fork, and rebuilds the affected binaries.
@@ -193,7 +194,20 @@ A launchd agent defined in `nix/user.nix` runs it every Sunday at 10:00, logging
 
 **5. Shell ergonomics.**
 `files/zsh/ic-workflow.zsh` wires the tools into the shell: `th` (treehouse), `nm` (no-mistakes), `gn` (gnhf), `cda` (chrome-devtools-axi), `ta` (tasks-axi), `qa` (quota-axi), `fm` (firstmate), `syncforks`, and `icdoctor`.
-`files/bin/ic-doctor` is the read-only health check for all five layers; run it whenever something feels off or after changing the setup.
+`files/bin/ic-doctor` is the read-only health check for all six layers; run it whenever something feels off or after changing the setup.
+
+**6. Cross-tool defaults.**
+`~/.claude/CLAUDE.md` is the single source of truth for agent instructions, and its "Default development system" section makes this toolchain the default for every development request.
+Other tools reach the same instructions and skills through symlinks:
+
+```text
+~/AGENTS.md               -> .claude/CLAUDE.md
+~/.codex/AGENTS.md        -> ~/AGENTS.md
+~/.codex/skills/<name>    -> ../../.agents/skills/<name>
+```
+
+So Claude Code, Codex, and anything else that reads `AGENTS.md` all see one set of rules and one set of skills.
+Cursor is not installed on this machine; when it is, point its User Rules at `~/AGENTS.md` (or symlink a project's `.cursor/rules` to it) to join the same system.
 
 ### From scratch: the full setup, step by step
 
@@ -248,8 +262,21 @@ done
 ln -sfn ~/github/lavish-axi/skills/lavish ~/.agents/skills/lavish
 ln -sfn ~/github/firstmate/skills/stow    ~/.agents/skills/stow
 ln -sfn ~/github/axi/.agents/skills/axi   ~/.agents/skills/axi
-for s in axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi stow tasks-axi; do
+ln -sfn ~/github/dotfiles-mac-nix/files/skills/ship ~/.agents/skills/ship
+for s in axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi ship stow tasks-axi; do
   ln -sfn ../../.agents/skills/$s ~/.claude/skills/$s
+done
+```
+
+**Step 5b: make it the default for every AI tool.**
+Keep the agent operating manual in `~/.claude/CLAUDE.md`, including a "Default development system" section that names these tools as the defaults, and chain the other tools to it:
+
+```bash
+ln -sfn .claude/CLAUDE.md ~/AGENTS.md
+mkdir -p ~/.codex/skills
+ln -sfn ~/AGENTS.md ~/.codex/AGENTS.md
+for s in axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi ship stow tasks-axi; do
+  ln -sfn ../../.agents/skills/$s ~/.codex/skills/$s
 done
 ```
 
@@ -284,7 +311,7 @@ fm claude   # cd ~/github/firstmate and launch an agent with the crew
 ic-doctor
 ```
 
-`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check of all five layers: every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the launchd sync agent and its last log line; and `gh` plus quota-axi auth.
+`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check of all six layers: every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the launchd sync agent and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md`, and codex skills).
 It exits non-zero if anything needs attention, and every failure line names the command that fixes it.
 A healthy system ends with `ic-doctor: all checks passed`.
 
@@ -294,7 +321,7 @@ The checklist when adopting the next tool, so it inherits all five layers:
 
 1. Fork, clone, and set the `upstream` remote (Step 2 pattern).
 2. Build and put it on `PATH`: `pnpm install --frozen-lockfile && pnpm run build && npm link` for Node tools, or `make build && install -m755 <bin> ~/.local/bin/<bin>` for Go tools.
-3. Symlink its skill into `~/.agents/skills` and `~/.claude/skills` (Step 5 pattern).
+3. Symlink its skill into `~/.agents/skills`, `~/.claude/skills`, and `~/.codex/skills` (Step 5 pattern).
 4. Add the repo to `REPOS` and a rebuild case to `rebuild_tool()` in `files/bin/sync-forks`.
 5. Add it to the `FORKS`, `BINARIES`, and `SKILLS` lists in `files/bin/ic-doctor`.
 6. Optionally add a short alias in `files/zsh/ic-workflow.zsh`.
@@ -321,6 +348,7 @@ The checklist when adopting the next tool, so it inherits all five layers:
 ### How the pieces work together day to day
 
 The point of the stack is that each tool owns one phase of the loop.
+The `ship` skill encodes the whole loop, so any agent in any tool can be told `/ship` and run it end to end.
 
 - Start the day with `quota-axi` to see how much agent headroom the session and week have left, and check the wheelhouse queue on GitHub for decisions other people are waiting on.
 - Pull the next piece of work with `tasks-axi ready`, and open an isolated worktree for it with `th` so streams of work never collide.
