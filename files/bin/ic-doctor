@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+# ic-doctor: one-shot health check for the agent-first IC toolchain.
+#
+# Verifies the five integration layers documented in the README:
+#   1. forks under ~/github (clone, upstream remote, branch, cleanliness)
+#   2. binaries on PATH with working --version
+#   3. agent skill symlinks (~/.agents/skills and ~/.claude/skills)
+#   4. the weekly sync-forks launchd agent and its last log line
+#   5. auth (gh, quota-axi keychain access)
+#   6. cross-tool defaults (~/AGENTS.md chain, codex AGENTS.md and skills)
+#
+# Read-only: it never mutates anything. Exits non-zero if any check FAILs;
+# warns are informational and do not affect the exit code.
+set -uo pipefail
+
+export PATH="$HOME/.local/bin:/opt/homebrew/bin:/run/current-system/sw/bin:/etc/profiles/per-user/$USER/bin:$HOME/go/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+GH_ROOT="$HOME/github"
+FORKS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi wheelhouse quota-axi"
+BINARIES="no-mistakes treehouse gnhf lavish-axi chrome-devtools-axi gh-axi tasks-axi quota-axi"
+SKILLS="axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi ship stow tasks-axi"
+
+fail=0
+ok()   { printf '  ok    %s\n' "$*"; }
+warn() { printf '  warn  %s\n' "$*"; }
+bad()  { printf '  FAIL  %s\n' "$*"; fail=1; }
+
+echo "[1/6] forks under $GH_ROOT"
+for r in $FORKS; do
+  d="$GH_ROOT/$r"
+  if [ ! -d "$d/.git" ]; then bad "$r: clone missing"; continue; fi
+  if ! git -C "$d" remote get-url upstream >/dev/null 2>&1; then
+    bad "$r: no upstream remote"; continue
+  fi
+  branch=$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null)
+  if [ -n "$(git -C "$d" status --porcelain 2>/dev/null | head -1)" ]; then
+    warn "$r: uncommitted changes (sync-forks will skip it)"
+  elif [ "$branch" != "main" ]; then
+    warn "$r: on branch $branch, not main (sync-forks will skip it)"
+  else
+    ok "$r"
+  fi
+done
+
+echo "[2/6] binaries"
+for t in $BINARIES; do
+  if p=$(command -v "$t" 2>/dev/null); then
+    if v=$("$t" --version 2>/dev/null | head -1); then
+      ok "$t $v"
+    else
+      bad "$t: on PATH at $p but --version failed (broken link? rebuild the clone)"
+    fi
+  else
+    bad "$t: not on PATH"
+  fi
+done
+
+echo "[3/6] agent skills"
+for s in $SKILLS; do
+  missing=""
+  for base in "$HOME/.agents/skills" "$HOME/.claude/skills"; do
+    [ -f "$base/$s/SKILL.md" ] || missing="$missing $base/$s"
+  done
+  if [ -n "$missing" ]; then bad "$s: missing or broken symlink:$missing"; else ok "$s"; fi
+done
+
+echo "[4/6] weekly sync"
+if launchctl list 2>/dev/null | grep -q "sync-forks"; then
+  ok "launchd agent loaded (Sundays 10:00)"
+else
+  bad "launchd agent not loaded (run: rebuild)"
+fi
+LOG="$HOME/Library/Logs/sync-forks.log"
+if [ -f "$LOG" ]; then
+  ok "last log: $(tail -1 "$LOG")"
+else
+  warn "no sync log yet at $LOG (runs Sundays, or run: syncforks)"
+fi
+
+echo "[5/6] auth"
+if gh auth status >/dev/null 2>&1; then
+  ok "gh authenticated"
+else
+  bad "gh not authenticated (run: gh auth login)"
+fi
+if command -v quota-axi >/dev/null 2>&1; then
+  if quota-axi --provider claude 2>/dev/null | grep -q ",fresh,"; then
+    ok "quota-axi reads live claude quota"
+  else
+    warn "quota-axi cannot read claude quota (run: quota-axi --allow-keychain-prompt auth)"
+  fi
+fi
+
+echo "[6/6] cross-tool defaults"
+if [ -f "$HOME/AGENTS.md" ] && [ "$(readlink "$HOME/AGENTS.md")" = ".claude/CLAUDE.md" ]; then
+  ok "~/AGENTS.md -> ~/.claude/CLAUDE.md"
+else
+  bad "~/AGENTS.md is not a symlink to .claude/CLAUDE.md"
+fi
+if grep -q "Default development system" "$HOME/.claude/CLAUDE.md" 2>/dev/null; then
+  ok "CLAUDE.md declares the default development system"
+else
+  bad "CLAUDE.md missing the 'Default development system' section"
+fi
+if [ -d "$HOME/.codex" ]; then
+  if [ -f "$HOME/.codex/AGENTS.md" ]; then
+    ok "codex: ~/.codex/AGENTS.md resolves"
+  else
+    bad "codex: ~/.codex/AGENTS.md missing or broken (ln -sfn ~/AGENTS.md ~/.codex/AGENTS.md)"
+  fi
+  codex_missing=""
+  for s in $SKILLS; do
+    [ -f "$HOME/.codex/skills/$s/SKILL.md" ] || codex_missing="$codex_missing $s"
+  done
+  if [ -n "$codex_missing" ]; then
+    bad "codex: skills missing or broken:$codex_missing"
+  else
+    ok "codex: all skills linked"
+  fi
+else
+  warn "codex not set up (~/.codex absent); skipping"
+fi
+if [ -d "$GH_ROOT/agents" ]; then
+  agents_bad=""
+  for f in "$HOME/.claude/CLAUDE.md" "$HOME/OPINIONS.md" "$HOME/VOICE.md" "$HOME/.claude/settings.json"; do
+    case "$(readlink "$f" 2>/dev/null)" in
+      "$GH_ROOT"/agents/*) ;;
+      *) agents_bad="$agents_bad $f" ;;
+    esac
+  done
+  if [ -n "$agents_bad" ]; then
+    bad "personal layer not linked into ~/github/agents:$agents_bad (run: ic-link)"
+  else
+    ok "personal layer versioned in ~/github/agents"
+  fi
+  if [ -n "$(git -C "$GH_ROOT/agents" status --porcelain 2>/dev/null | head -1)" ]; then
+    warn "agents repo has uncommitted changes (commit and push to keep it versioned)"
+  fi
+else
+  warn "private agents repo not cloned (~/github/agents); personal layer unversioned"
+fi
+
+echo
+if [ "$fail" -eq 0 ]; then
+  echo "ic-doctor: all checks passed"
+else
+  echo "ic-doctor: issues found, see FAIL lines above"
+fi
+exit "$fail"

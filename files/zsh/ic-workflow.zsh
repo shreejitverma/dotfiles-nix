@@ -393,8 +393,11 @@ command -v treehouse   >/dev/null && alias th='treehouse'
 command -v no-mistakes >/dev/null && alias nm='no-mistakes'
 command -v gnhf        >/dev/null && alias gn='gnhf'
 command -v chrome-devtools-axi >/dev/null && alias cda='chrome-devtools-axi'
+command -v tasks-axi   >/dev/null && alias ta='tasks-axi'
+command -v quota-axi   >/dev/null && alias qa='quota-axi'
 alias syncforks='$HOME/github/dotfiles-mac-nix/files/bin/sync-forks'
 alias syncforks-dry='$HOME/github/dotfiles-mac-nix/files/bin/sync-forks --dry-run'
+alias icdoctor='$HOME/github/dotfiles-mac-nix/files/bin/ic-doctor'
 
 # firstmate is launched from inside its workspace; cd there and optionally
 # start an agent: `firstmate` (just cd) or `firstmate claude` (cd + launch).

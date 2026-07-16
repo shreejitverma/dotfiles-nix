@@ -12,9 +12,11 @@
     # Use "uninstall" or "zap" only once your Brewfile below is the full
     # source of truth, or it will remove anything not listed here.
     onActivation.cleanup = "none";
+    onActivation.autoUpdate = true;
     taps = [ ];
     brews = [
       "autoconf"
+      "herdr"
     ];
     casks = [
       "wezterm"
@@ -45,11 +47,16 @@
       NSNavPanelExpandedStateForSaveMode = true;
       NSNavPanelExpandedStateForSaveMode2 = true;
       AppleShowAllExtensions = true;
+      _HIHideMenuBar = true;  # auto-hide the menu bar
     };
+
+    dock.autohide = true;
 
     finder = {
       AppleShowAllExtensions = true;
       ShowPathbar = true;
+      FXPreferredViewStyle = "Nlsv";  # list view by default
+      CreateDesktop = false;          # clean desktop
     };
 
     trackpad = {

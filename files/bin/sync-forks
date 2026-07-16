@@ -17,7 +17,7 @@ export PATH="$HOME/.local/bin:/opt/homebrew/bin:/run/current-system/sw/bin:/etc/
 
 GH_ROOT="$HOME/github"
 LOG="$HOME/Library/Logs/sync-forks.log"
-REPOS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi"
+REPOS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi wheelhouse quota-axi"
 mkdir -p "$(dirname "$LOG")"
 
 DRY=0
@@ -43,8 +43,18 @@ rebuild_tool() {
     chrome-devtools-axi) ( cd "$GH_ROOT/chrome-devtools-axi" && pnpm install --frozen-lockfile >>"$LOG" 2>&1 \
                    && pnpm run build >>"$LOG" 2>&1 ) \
                  && log "  rebuilt chrome-devtools-axi" || log "  rebuild chrome-devtools-axi FAILED" ;;
+    gh-axi)      ( cd "$GH_ROOT/gh-axi" && pnpm install --frozen-lockfile >>"$LOG" 2>&1 \
+                   && pnpm run build >>"$LOG" 2>&1 ) \
+                 && log "  rebuilt gh-axi" || log "  rebuild gh-axi FAILED" ;;
+    tasks-axi)   ( cd "$GH_ROOT/tasks-axi" && pnpm install --frozen-lockfile >>"$LOG" 2>&1 \
+                   && pnpm run build >>"$LOG" 2>&1 ) \
+                 && log "  rebuilt tasks-axi" || log "  rebuild tasks-axi FAILED" ;;
+    quota-axi)   ( cd "$GH_ROOT/quota-axi" && pnpm install --frozen-lockfile >>"$LOG" 2>&1 \
+                   && pnpm run build >>"$LOG" 2>&1 ) \
+                 && log "  rebuilt quota-axi" || log "  rebuild quota-axi FAILED" ;;
     firstmate)   : ;;  # pure shell, nothing to build
     axi)         : ;;  # skill + SDK source, no daily-use binary to build
+    wheelhouse)  : ;;  # GitHub Actions machine; runs on GitHub, nothing local to build
   esac
 }
 
