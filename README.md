@@ -37,7 +37,8 @@ The goal is to provide a reusable foundation that you can make your own.
 - `nix/user.nix` — user environment: packages, shell, git, fonts, dotfiles (Home Manager)
 - `files/.config/wezterm/wezterm.lua` — WezTerm config linked into place
 - `files/.config/herdr/config.toml` — herdr config linked into place
-- `files/bin/` — personal scripts kept on `PATH`
+- `files/bin/` — personal scripts kept on `PATH`, including `sync-forks` (weekly fork sync), `ic-link` (symlink farm), and `ic-doctor` (health check)
+- `files/skills/` — agent skills owned by this repo (currently `ship`)
 - `files/zsh/ic-workflow.zsh` — IC workflow shell config sourced by zsh
 - `AGENTS.md` — repo-specific notes for coding agents
 - `blog.md` — local copy of the [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web)
@@ -113,6 +114,7 @@ My rough rule of thumb:
 - use **ecosystem-specific package managers** like `npm` when that is the right abstraction for the tool
 
 A good setup does not force every tool through one package manager. It just makes the ownership of each layer clear.
+The [complete software inventory](#complete-software-inventory) below records which layer owns every installed piece of software.
 
 ## Why this setup looks like this
 
@@ -221,10 +223,58 @@ The personal layer itself is version controlled in a **private** repo, `~/github
 Edits made through the symlinks land in the repo; commit and push there as usual.
 `files/bin/ic-link` is the idempotent script that creates this entire farm (skills, mirrors, instruction chain, personal layer), and `ic-doctor` verifies it.
 
+### Complete software inventory
+
+Every piece of software on this system belongs to exactly one owner.
+This is the full map; if something is installed and not listed here, it is unmanaged and should be adopted into a layer.
+
+| Layer | Owner | What it installs |
+|---|---|---|
+| OS toolchain | Apple | Xcode Command Line Tools: `git` (pre-Nix), `make`, `clang` (`xcode-select --install`) |
+| Bootstrap | `setup/mac.sh` | Determinate Nix, Homebrew, nvm + Node LTS (fallback; the primary Node is Homebrew's) |
+| System config | `nix/host.nix` | `starship`; brew formulas `autoconf`, `herdr`; casks `wezterm`, `amethyst`; macOS defaults |
+| User packages | `nix/user.nix` `home.packages` | `git curl wget jq fd fastfetch ripgrep killall lazygit tree bun rustup zip unzip just dust duf procs sd btop tokei tealdeer uv ruff difftastic` + fonts (Hack Nerd Font, Roboto, Noto, Font Awesome) |
+| User programs | `nix/user.nix` `programs.*` | `git`+`delta`, `starship`, `bat`, `fzf`, `zoxide`, `atuin`, `direnv`, `zsh`, `eza` |
+| Manual Homebrew | `brew` (not yet declared in nix) | formulas `node`, `go`, `gh`; casks `google-chrome` (required by chrome-devtools-axi), `codex` |
+| npm globals | `npm install -g` | `pnpm` (build tool for all Node forks) |
+| Native installers | vendor scripts | `claude` (Claude Code, `curl -fsSL https://claude.ai/install.sh \| bash`) |
+| Go builds | `sync-forks` / manual | `no-mistakes`, `treehouse` into `~/.local/bin` |
+| npm links | `sync-forks` / manual | `chrome-devtools-axi`, `gh-axi`, `gnhf`, `lavish-axi`, `quota-axi`, `tasks-axi` |
+| Skills installer | `npx skills` | third-party skills: `deploy-to-vercel`, `find-skills`, `vercel-*`, `web-design-guidelines`, `writing-guidelines` |
+| Symlink farm | `ic-link` | all skill, instruction-chain, and personal-layer links |
+
+Known gap, on purpose: the "Manual Homebrew" row is not yet declared in `nix/host.nix`.
+Moving those five entries into `homebrew.brews`/`homebrew.casks` would make them declarative; until then, this table is their record.
+
 ### From scratch: the full setup, step by step
 
 These are the exact commands to reproduce this system on a new Mac.
-Prerequisite: finish the base setup above (`setup/mac.sh`, then `rebuild`), which provides git, Node via nvm, pnpm, Go, and `gh`.
+Nothing is assumed beyond a fresh macOS install with an admin account.
+
+**Step 0: prerequisites and base system.**
+
+```bash
+xcode-select --install          # Apple CLT: git, make, clang (accept the GUI prompt)
+git clone https://github.com/<you>/dotfiles-mac-nix.git ~/github/dotfiles-mac-nix
+cd ~/github/dotfiles-mac-nix
+bash setup/mac.sh               # installs Nix, Homebrew, applies nix-darwin + Home Manager, installs nvm + Node LTS
+exec zsh                        # pick up the new environment
+```
+
+Then the runtimes and apps the toolchain needs, which the base config does not install:
+
+```bash
+brew install node go gh         # Node (primary), Go, GitHub CLI
+brew install --cask google-chrome   # required by chrome-devtools-axi
+npm install -g pnpm             # build tool for all the Node forks
+```
+
+And the AI coding tools themselves:
+
+```bash
+curl -fsSL https://claude.ai/install.sh | bash   # Claude Code -> ~/.local/bin/claude
+brew install --cask codex                        # Codex CLI
+```
 
 **Step 1: authenticate GitHub.**
 
@@ -306,6 +356,22 @@ firstmate runs from inside its workspace; the shell function handles that:
 
 ```bash
 fm claude   # cd ~/github/firstmate and launch an agent with the crew
+```
+
+Optional ambient context: some tools can inject their state at agent session start (for Claude Code, Codex, and OpenCode) instead of waiting to be asked.
+Not currently enabled here; enable per tool with:
+
+```bash
+tasks-axi setup hooks             # backlog as ambient session context
+chrome-devtools-axi setup hooks   # browser bridge ambient context
+```
+
+Since `~/.claude/settings.json` is a symlink into the private agents repo, the hook edits land there; commit them.
+
+Optional third-party skills come from the [skills](https://github.com/vercel-labs/skills) installer, not from ic-link:
+
+```bash
+npx skills add <owner>/<repo> --skill <name> -g   # -g = all projects (~/.claude/skills)
 ```
 
 **Step 9: verify everything.**
