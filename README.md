@@ -1,4 +1,4 @@
-# dotfiles-mac-nix
+# dotfiles-nix
 
 This repo is the public, reusable core of my Mac setup.
 
