@@ -21,6 +21,7 @@
     casks = [
       "wezterm"
       "amethyst"
+      "opensuperwhisper"
     ];
   };
 
@@ -61,6 +62,18 @@
 
     trackpad = {
       Clicking = true;
+    };
+
+    CustomUserPreferences = {
+      # OpenSuperWhisper: toggle recording with Cmd+` (key code 50 = backtick,
+      # carbon modifier 256 = Command). Restart the app after changing this.
+      # Cmd+` is deliberately kept despite being macOS's default "Move focus
+      # to next window" shortcut; that system binding is left untouched. If
+      # the overlap ever conflicts, disable it manually in System Settings >
+      # Keyboard > Keyboard Shortcuts > Keyboard.
+      "ru.starmel.OpenSuperWhisper" = {
+        KeyboardShortcuts_toggleRecord = ''{"carbonKeyCode":50,"carbonModifiers":256}'';
+      };
     };
   };
 

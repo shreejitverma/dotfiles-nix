@@ -232,7 +232,7 @@ This is the full map; if something is installed and not listed here, it is unman
 |---|---|---|
 | OS toolchain | Apple | Xcode Command Line Tools: `git` (pre-Nix), `make`, `clang` (`xcode-select --install`) |
 | Bootstrap | `setup/mac.sh` | Determinate Nix, Homebrew, nvm + Node LTS (fallback; the primary Node is Homebrew's) |
-| System config | `nix/host.nix` | `starship`; brew formulas `autoconf`, `herdr`; casks `wezterm`, `amethyst`; macOS defaults |
+| System config | `nix/host.nix` | `starship`; brew formulas `autoconf`, `herdr`; casks `wezterm`, `amethyst`, `opensuperwhisper`; macOS defaults (incl. OpenSuperWhisper Cmd+` record hotkey) |
 | User packages | `nix/user.nix` `home.packages` | `git curl wget jq fd fastfetch ripgrep killall lazygit tree bun rustup zip unzip just dust duf procs sd btop tokei tealdeer uv ruff difftastic` + fonts (Hack Nerd Font, Roboto, Noto, Font Awesome) |
 | User programs | `nix/user.nix` `programs.*` | `git`+`delta`, `starship`, `bat`, `fzf`, `zoxide`, `atuin`, `direnv`, `zsh`, `eza` |
 | Manual Homebrew | `brew` (not yet declared in nix) | formulas `node`, `go`, `gh`; casks `google-chrome` (required by chrome-devtools-axi), `codex` |
@@ -403,6 +403,10 @@ The checklist when adopting the next tool, so it inherits all five layers:
   Always use `pnpm install --frozen-lockfile`.
 - **A binary is on `PATH` but `--version` fails.**
   The npm link points at a clone whose `dist/` is stale or missing; rebuild the clone (`pnpm run build`) or relink (`npm link`).
+- **``Cmd+` `` moves window focus instead of, or as well as, toggling OpenSuperWhisper recording.**
+  ``Cmd+` `` is also macOS's default "Move focus to next window" shortcut; the record hotkey declared in `nix/host.nix` deliberately overlaps it and leaves the system binding untouched.
+  If the overlap ever conflicts, disable the system shortcut manually in System Settings > Keyboard > Keyboard Shortcuts > Keyboard.
+  The hotkey preference is applied by `rebuild`; restart OpenSuperWhisper after changing it.
 - **quota-axi shows `auth_required` for claude.**
   Keychain access has not been granted; run `quota-axi --allow-keychain-prompt auth` and click "Always Allow".
 - **sync-forks skipped a repo.**
