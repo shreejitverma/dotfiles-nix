@@ -31,17 +31,19 @@ The goal is to provide a reusable foundation that you can make your own.
 
 ## Repo structure
 
-- `setup/mac.sh` — bootstrap a fresh Mac
-- `flake.nix` — top-level Nix wiring
-- `nix/host.nix` — machine-level macOS config (nix-darwin)
-- `nix/user.nix` — user environment: packages, shell, git, fonts, dotfiles (Home Manager)
-- `files/.config/wezterm/wezterm.lua` — WezTerm config linked into place
-- `files/.config/herdr/config.toml` — herdr config linked into place
-- `files/bin/` — personal scripts kept on `PATH`, including `sync-forks` (weekly fork sync), `ic-link` (symlink farm), and `ic-doctor` (health check)
-- `files/skills/` — agent skills owned by this repo (currently `ship`)
-- `files/zsh/ic-workflow.zsh` — IC workflow shell config sourced by zsh
-- `AGENTS.md` — repo-specific notes for coding agents
-- `blog.md` — local copy of the [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web)
+- `setup/mac.sh` - bootstrap a fresh Mac
+- `setup/README.md` - bootstrap usage and testing notes
+- `flake.nix` - top-level Nix wiring
+- `nix/host.nix` - machine-level macOS config (nix-darwin)
+- `nix/user.nix` - user environment: packages, shell, git, fonts, dotfiles (Home Manager)
+- `files/.config/wezterm/wezterm.lua` - WezTerm config linked into place
+- `files/.config/herdr/config.toml` - herdr config linked into place
+- `files/bin/` - personal scripts kept on `PATH`, including `sync-forks` (weekly fork sync), `ic-link` (symlink farm), and `ic-doctor` (health check)
+- `files/skills/` - agent skills owned by this repo (currently `ship`)
+- `files/zsh/ic-workflow.zsh` - IC workflow shell config sourced by zsh
+- `tests/` - regression tests for the bootstrap script
+- `AGENTS.md` - repo-specific notes for coding agents (`CLAUDE.md` is a symlink to it)
+- `blog.md` - local copy of the [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web)
 
 ## How to use it
 
@@ -88,6 +90,12 @@ The script will:
 - apply the `nix-darwin` + Home Manager config
 - install [`nvm`](https://github.com/nvm-sh/nvm) and a default Node.js version if needed
 
+On a fresh machine, the bootstrap is designed to complete in one run.
+After the Determinate installer runs, the script sources the Nix daemon profile into the current shell and uses an absolute `nix` path for the first `nix-darwin` activation, so you should not need a second shell or a second setup run.
+
+The `NIX_DAEMON_PROFILE` and `DARWIN_REBUILD_BIN` environment variables are only there so the regression test can point the script at sandboxed paths.
+Normal use should leave them unset.
+
 ## How I manage changes later
 
 After the initial bootstrap, the usual workflow is:
@@ -104,6 +112,18 @@ This alias is included in the shell config and expands to the repo path used in 
 ```bash
 /run/current-system/sw/bin/darwin-rebuild switch --flake ~/github/dotfiles-mac-nix#mac
 ```
+
+## Testing
+
+Do not run `setup/mac.sh` against a development or CI machine just to test it.
+Run the sandboxed regression test instead:
+
+```bash
+bash tests/mac_setup_test.sh
+```
+
+It runs the real script logic with stub executables for `curl`, `sh`, `nix`, `darwin-rebuild`, `sudo`, and `bash`, covering both a fresh-machine single-pass bootstrap and the already-bootstrapped fast path.
+The harness also guards every harness/stub write against sandbox escapes, re-homes `NVM_DIR` under the sandboxed `HOME`, and unsets inherited `BASH_ENV`/`ENV` hooks before invoking the script under test.
 
 ## Where to add new tools
 
