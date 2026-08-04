@@ -19,9 +19,28 @@ bash setup/mac.sh
 What the script does:
 
 - checks that you replaced the placeholder values first
+- checks that the checkout sits at the `dotfilesDir` path declared in `nix/user.nix`, since everything the activation links (app configs, the `files/bin` PATH entry, the zsh workflow layer, the `sync-forks` agent) is built from that literal and would otherwise dangle silently
 - installs Determinate Nix Installer if needed
 - installs Homebrew if needed
 - applies the `nix-darwin` + Home Manager configuration
 - installs `nvm` and a default Node.js version if needed
 
-This script is meant for the **first bootstrap on a new Mac**. After that, most ongoing changes should happen by editing the Nix config and running `darwin-rebuild switch --flake ~/github/dotfiles-mac-nix#mac`.
+This script is meant for the **first bootstrap on a new Mac**. After that, most ongoing changes should happen by editing the Nix config and running `darwin-rebuild switch --flake ~/github/dotfiles-nix#mac`.
+
+It's designed to complete in a single run: right after installing Nix it sources the daemon profile into the current shell, and the first `nix-darwin` activation resolves `nix` by absolute path with the experimental features it needs, so you should **not** need to run it twice or open a new shell partway through.
+
+`NIX_DAEMON_PROFILE` and `DARWIN_REBUILD_BIN` are overridable only so the regression test can point the script at sandboxed paths.
+For normal bootstrap usage, leave them unset.
+
+## Testing
+
+`setup/mac.sh` installs Nix and activates a real system, so tests never run it against the real machine. Instead:
+
+```bash
+bash tests/mac_setup_test.sh
+```
+
+This runs the actual script against a PATH-masked sandbox of stub executables, without touching the network, the Nix store, Homebrew, sudo, or system state.
+It covers four scenarios: a fresh Mac bootstrapping in a single pass, a fresh Mac cloned without a committed `flake.lock` (which must be generated as the invoking user, never under `sudo`, and strictly before the activation), a machine that is already bootstrapped and takes the `darwin-rebuild switch` fast path, and a checkout sitting at a path that does not match the `dotfilesDir` declared in `nix/user.nix` (which must fail before anything is installed or activated).
+The harness also re-homes `NVM_DIR` under the sandboxed `HOME`, unsets inherited `BASH_ENV`/`ENV`, and refuses any harness or stub write path that escapes the temp sandbox.
+See `AGENTS.md` for details.

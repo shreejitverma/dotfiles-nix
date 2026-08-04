@@ -6,7 +6,9 @@ set -euo pipefail
 bold() { printf '\033[1m%s\033[0m\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
-FLAKE="$HOME/github/dotfiles-mac-nix"
+# Derived from this script's own location (files/bin/up), so `up` rebuilds
+# whatever checkout it was invoked from instead of a hardcoded path.
+FLAKE=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)
 
 bold "==> nix flake update"
 nix flake update --flake "$FLAKE"

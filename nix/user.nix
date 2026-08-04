@@ -1,7 +1,7 @@
 { config, pkgs, ... }:
 
 let
-  dotfilesDir = "${config.home.homeDirectory}/github/dotfiles-mac-nix";
+  dotfilesDir = "${config.home.homeDirectory}/github/dotfiles-nix";
 in
 {
   home.username = "shreejitverma";
@@ -192,7 +192,7 @@ in
       rebasemst = "git rebase -i master";
       cc = "claude --dangerously-skip-permissions";
       co = "codex --full-auto";
-      rebuild = "/run/current-system/sw/bin/darwin-rebuild switch --flake ~/github/dotfiles-mac-nix#mac";
+      rebuild = "/run/current-system/sw/bin/darwin-rebuild switch --flake ${dotfilesDir}#mac";
     };
     initContent = ''
       bindkey '^f' autosuggest-accept

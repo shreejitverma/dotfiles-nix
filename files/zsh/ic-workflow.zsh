@@ -6,6 +6,16 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
+# This repo's checkout path, derived from this file's own location so the
+# aliases below follow the checkout they were sourced from. Defined once here;
+# every alias that needs the path interpolates $IC_DOTFILES rather than
+# repeating a literal. The fallback covers a source context where zsh cannot
+# report the script path.
+# -----------------------------------------------------------------------------
+IC_DOTFILES=${${(%):-%x}:A:h:h:h}
+[ -d "$IC_DOTFILES/files/zsh" ] || IC_DOTFILES="$HOME/github/dotfiles-nix"
+
+# -----------------------------------------------------------------------------
 # Shell options: sane, fast, low-friction interactive behavior.
 # -----------------------------------------------------------------------------
 setopt AUTO_CD                 # `foo` runs `cd foo` when foo is a directory
@@ -40,7 +50,7 @@ alias dl='cd ~/Downloads'
 alias dt='cd ~/Desktop'
 alias docs='cd ~/Documents'
 alias gh-dir='cd ~/github'
-alias dot='cd ~/github/dotfiles-mac-nix'
+alias dot="cd ${(q)IC_DOTFILES}"
 alias nvc='cd ~/.config/nvim'
 
 # -----------------------------------------------------------------------------
@@ -86,8 +96,8 @@ fi
 alias e='${EDITOR:-vim}'
 alias cl='clear'
 alias reload='exec zsh'
-alias zshrc='${EDITOR:-vim} ~/github/dotfiles-mac-nix/nix/user.nix'
-alias icwf='${EDITOR:-vim} ~/github/dotfiles-mac-nix/files/zsh/ic-workflow.zsh'
+alias zshrc="\${EDITOR:-vim} ${(q)IC_DOTFILES}/nix/user.nix"
+alias icwf="\${EDITOR:-vim} ${(q)IC_DOTFILES}/files/zsh/ic-workflow.zsh"
 
 # -----------------------------------------------------------------------------
 # Git (rich set; complements the short aliases already defined in nix)
@@ -211,9 +221,9 @@ command -v k9s >/dev/null && alias k9='k9s'
 # -----------------------------------------------------------------------------
 # Nix / darwin
 # -----------------------------------------------------------------------------
-alias nbuild='darwin-rebuild build --flake ~/github/dotfiles-mac-nix#mac'
-alias ncheck='nix flake check ~/github/dotfiles-mac-nix'
-alias nup='nix flake update --flake ~/github/dotfiles-mac-nix'
+alias nbuild="darwin-rebuild build --flake ${(q)IC_DOTFILES}#mac"
+alias ncheck="nix flake check ${(q)IC_DOTFILES}"
+alias nup="nix flake update --flake ${(q)IC_DOTFILES}"
 alias ngc='nix-collect-garbage -d'
 alias nsearch='nix search nixpkgs'
 alias nrun='nix run'
@@ -395,9 +405,9 @@ command -v gnhf        >/dev/null && alias gn='gnhf'
 command -v chrome-devtools-axi >/dev/null && alias cda='chrome-devtools-axi'
 command -v tasks-axi   >/dev/null && alias ta='tasks-axi'
 command -v quota-axi   >/dev/null && alias qa='quota-axi'
-alias syncforks='$HOME/github/dotfiles-mac-nix/files/bin/sync-forks'
-alias syncforks-dry='$HOME/github/dotfiles-mac-nix/files/bin/sync-forks --dry-run'
-alias icdoctor='$HOME/github/dotfiles-mac-nix/files/bin/ic-doctor'
+alias syncforks="${(q)IC_DOTFILES}/files/bin/sync-forks"
+alias syncforks-dry="${(q)IC_DOTFILES}/files/bin/sync-forks --dry-run"
+alias icdoctor="${(q)IC_DOTFILES}/files/bin/ic-doctor"
 
 # firstmate is launched from inside its workspace; cd there and optionally
 # start an agent: `firstmate` (just cd) or `firstmate claude` (cd + launch).

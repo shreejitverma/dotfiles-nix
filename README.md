@@ -31,25 +31,27 @@ The goal is to provide a reusable foundation that you can make your own.
 
 ## Repo structure
 
-- `setup/mac.sh` — bootstrap a fresh Mac
-- `flake.nix` — top-level Nix wiring
-- `nix/host.nix` — machine-level macOS config (nix-darwin)
-- `nix/user.nix` — user environment: packages, shell, git, fonts, dotfiles (Home Manager)
-- `files/.config/wezterm/wezterm.lua` — WezTerm config linked into place
-- `files/.config/herdr/config.toml` — herdr config linked into place
-- `files/bin/` — personal scripts kept on `PATH`, including `sync-forks` (weekly fork sync), `ic-link` (symlink farm), and `ic-doctor` (health check)
-- `files/skills/` — agent skills owned by this repo (currently `ship`)
-- `files/zsh/ic-workflow.zsh` — IC workflow shell config sourced by zsh
-- `AGENTS.md` — repo-specific notes for coding agents
-- `blog.md` — local copy of the [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web)
+- `setup/mac.sh` - bootstrap a fresh Mac
+- `setup/README.md` - bootstrap usage and testing notes
+- `flake.nix` - top-level Nix wiring
+- `nix/host.nix` - machine-level macOS config (nix-darwin)
+- `nix/user.nix` - user environment: packages, shell, git, fonts, dotfiles (Home Manager)
+- `files/.config/wezterm/wezterm.lua` - WezTerm config linked into place
+- `files/.config/herdr/config.toml` - herdr config linked into place
+- `files/bin/` - personal scripts kept on `PATH`, including `sync-forks` (weekly fork sync), `ic-link` (symlink farm), and `ic-doctor` (health check)
+- `files/skills/` - agent skills owned by this repo (currently `ship`)
+- `files/zsh/ic-workflow.zsh` - IC workflow shell config sourced by zsh
+- `tests/` - regression tests for the bootstrap script
+- `AGENTS.md` - repo-specific notes for coding agents (`CLAUDE.md` is a symlink to it)
+- `blog.md` - local copy of the [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web)
 
 ## How to use it
 
 ### 1. Clone the repo
 
 ```bash
-git clone git@github.com:kunchenguid/dotfiles-mac-nix.git ~/github/dotfiles-mac-nix
-cd ~/github/dotfiles-mac-nix
+git clone git@github.com:shreejitverma/dotfiles-nix.git ~/github/dotfiles-nix
+cd ~/github/dotfiles-nix
 ```
 
 ### 2. Replace the placeholders
@@ -88,6 +90,12 @@ The script will:
 - apply the `nix-darwin` + Home Manager config
 - install [`nvm`](https://github.com/nvm-sh/nvm) and a default Node.js version if needed
 
+On a fresh machine, the bootstrap is designed to complete in one run.
+After the Determinate installer runs, the script sources the Nix daemon profile into the current shell and uses an absolute `nix` path for the first `nix-darwin` activation, so you should not need a second shell or a second setup run.
+
+The `NIX_DAEMON_PROFILE` and `DARWIN_REBUILD_BIN` environment variables are only there so the regression test can point the script at sandboxed paths.
+Normal use should leave them unset.
+
 ## How I manage changes later
 
 After the initial bootstrap, the usual workflow is:
@@ -102,8 +110,20 @@ rebuild
 This alias is included in the shell config and expands to the repo path used in this guide:
 
 ```bash
-/run/current-system/sw/bin/darwin-rebuild switch --flake ~/github/dotfiles-mac-nix#mac
+/run/current-system/sw/bin/darwin-rebuild switch --flake ~/github/dotfiles-nix#mac
 ```
+
+## Testing
+
+Do not run `setup/mac.sh` against a development or CI machine just to test it.
+Run the sandboxed regression test instead:
+
+```bash
+bash tests/mac_setup_test.sh
+```
+
+It runs the real script logic against a sandbox of stub executables, so nothing is ever installed or activated.
+See [`tests/README.md`](tests/README.md) for the scenarios it covers and how the sandbox is guarded.
 
 ## Where to add new tools
 
@@ -137,7 +157,7 @@ This section documents how it is wired on my system today, and then gives the ex
 
 | Tool | What it does | Local artifact |
 |---|---|---|
-| [dotfiles-mac-nix](https://github.com/kunchenguid/dotfiles-mac-nix) | This repo: nix-darwin + Home Manager + Homebrew base system | `rebuild` alias |
+| [dotfiles-nix](https://github.com/shreejitverma/dotfiles-nix) | This repo: nix-darwin + Home Manager + Homebrew base system | `rebuild` alias |
 | [axi](https://github.com/kunchenguid/axi) | The 10 AXI principles for agent-ergonomic CLIs, plus the SDK and skill | skill only |
 | [gh-axi](https://github.com/kunchenguid/gh-axi) | GitHub (issues, PRs, CI, releases, Projects) through an agent-ergonomic CLI | `gh-axi` |
 | [tasks-axi](https://github.com/kunchenguid/tasks-axi) | Task and backlog manager for the current workspace, agent-driven | `tasks-axi` |
@@ -196,7 +216,7 @@ A launchd agent defined in `nix/user.nix` runs it every Sunday at 10:00, logging
 
 **5. Shell ergonomics.**
 `files/zsh/ic-workflow.zsh` wires the tools into the shell: `th` (treehouse), `nm` (no-mistakes), `gn` (gnhf), `cda` (chrome-devtools-axi), `ta` (tasks-axi), `qa` (quota-axi), `fm` (firstmate), `syncforks`, and `icdoctor`.
-`files/bin/ic-doctor` is the read-only health check for all six layers; run it whenever something feels off or after changing the setup.
+`files/bin/ic-doctor` is the read-only health check for the whole system; run it whenever something feels off or after changing the setup.
 
 **6. Cross-tool defaults.**
 `~/.claude/CLAUDE.md` is the single source of truth for agent instructions, and its "Default development system" section makes this toolchain the default for every development request.
@@ -255,8 +275,8 @@ Nothing is assumed beyond a fresh macOS install with an admin account.
 
 ```bash
 xcode-select --install          # Apple CLT: git, make, clang (accept the GUI prompt)
-git clone https://github.com/<you>/dotfiles-mac-nix.git ~/github/dotfiles-mac-nix
-cd ~/github/dotfiles-mac-nix
+git clone https://github.com/<you>/dotfiles-nix.git ~/github/dotfiles-nix
+cd ~/github/dotfiles-nix
 bash setup/mac.sh               # installs Nix, Homebrew, applies nix-darwin + Home Manager, installs nvm + Node LTS
 exec zsh                        # pick up the new environment
 ```
@@ -380,7 +400,7 @@ npx skills add <owner>/<repo> --skill <name> -g   # -g = all projects (~/.claude
 ic-doctor
 ```
 
-`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check of all six layers: every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the launchd sync agent and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md`, and codex skills).
+`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in `nix/user.nix`, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the launchd sync agent and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md`, and codex skills).
 It exits non-zero if anything needs attention, and every failure line names the command that fixes it.
 A healthy system ends with `ic-doctor: all checks passed`.
 
@@ -436,4 +456,5 @@ The `ship` skill encodes the whole loop, so any agent in any tool can be told `/
 ## Related
 
 - Long-form write-up: [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web)
-- GitHub repo: <https://github.com/kunchenguid/dotfiles-mac-nix>
+- GitHub repo: <https://github.com/shreejitverma/dotfiles-nix>
+- Forked from [kunchenguid/dotfiles-mac-nix](https://github.com/kunchenguid/dotfiles-mac-nix), wired here as the `upstream` remote. Sync with `git fetch upstream && git merge upstream/main`.

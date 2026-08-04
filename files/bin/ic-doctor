@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # ic-doctor: one-shot health check for the agent-first IC toolchain.
 #
-# Verifies the five integration layers documented in the README:
-#   1. forks under ~/github (clone, upstream remote, branch, cleanliness)
-#   2. binaries on PATH with working --version
-#   3. agent skill symlinks (~/.agents/skills and ~/.claude/skills)
-#   4. the weekly sync-forks launchd agent and its last log line
-#   5. auth (gh, quota-axi keychain access)
-#   6. cross-tool defaults (~/AGENTS.md chain, codex AGENTS.md and skills)
+# Verifies the integration layers documented in the README:
+#   1. this repo's checkout path vs the dotfilesDir nix/user.nix declares
+#   2. forks under ~/github (clone, upstream remote, branch, cleanliness)
+#   3. binaries on PATH with working --version
+#   4. agent skill symlinks (~/.agents/skills and ~/.claude/skills)
+#   5. the weekly sync-forks launchd agent and its last log line
+#   6. auth (gh, quota-axi keychain access)
+#   7. cross-tool defaults (~/AGENTS.md chain, codex AGENTS.md and skills)
 #
 # Read-only: it never mutates anything. Exits non-zero if any check FAILs;
 # warns are informational and do not affect the exit code.
@@ -25,7 +26,39 @@ ok()   { printf '  ok    %s\n' "$*"; }
 warn() { printf '  warn  %s\n' "$*"; }
 bad()  { printf '  FAIL  %s\n' "$*"; fail=1; }
 
-echo "[1/6] forks under $GH_ROOT"
+# Everything this repo wires into the machine (PATH, the zsh workflow layer,
+# the out-of-store app config symlinks, the sync-forks launchd agent) is built
+# from the dotfilesDir literal in nix/user.nix. If the checkout is not actually
+# at that path, all of it dangles silently, so check it before anything else.
+echo "[1/7] dotfiles checkout"
+SELF_REPO=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)
+declared_rel=$(sed -n 's/.*dotfilesDir = "${config\.home\.homeDirectory}\([^"]*\)".*/\1/p' \
+  "$SELF_REPO/nix/user.nix" | head -1)
+if [ -z "$declared_rel" ]; then
+  bad "could not read dotfilesDir from $SELF_REPO/nix/user.nix"
+else
+  declared="$HOME$declared_rel"
+  if [ ! -d "$declared" ]; then
+    bad "nix/user.nix declares dotfilesDir=$declared, which does not exist (checkout is $SELF_REPO)"
+  elif [ "$(cd -P "$declared" && pwd)" != "$SELF_REPO" ]; then
+    bad "dotfilesDir=$declared does not match this checkout $SELF_REPO (rebuild would link the wrong tree)"
+  else
+    ok "dotfilesDir matches this checkout ($SELF_REPO)"
+  fi
+fi
+# The rebuild links these through mkOutOfStoreSymlink, so a wrong dotfilesDir
+# leaves them present but dangling; -e follows the chain and catches that.
+for f in .config/wezterm/wezterm.lua .config/herdr/config.toml; do
+  if [ -e "$HOME/$f" ]; then ok "~/$f resolves"; else bad "~/$f dangling or missing (run: rebuild)"; fi
+done
+if [ -f "$SELF_REPO/files/zsh/ic-workflow.zsh" ] && \
+   grep -qF "$SELF_REPO/files/zsh/ic-workflow.zsh" "$HOME/.zshrc" 2>/dev/null; then
+  ok "zsh sources the IC workflow layer"
+else
+  bad "~/.zshrc does not source $SELF_REPO/files/zsh/ic-workflow.zsh (run: rebuild)"
+fi
+
+echo "[2/7] forks under $GH_ROOT"
 for r in $FORKS; do
   d="$GH_ROOT/$r"
   if [ ! -d "$d/.git" ]; then bad "$r: clone missing"; continue; fi
@@ -42,7 +75,7 @@ for r in $FORKS; do
   fi
 done
 
-echo "[2/6] binaries"
+echo "[3/7] binaries"
 for t in $BINARIES; do
   if p=$(command -v "$t" 2>/dev/null); then
     if v=$("$t" --version 2>/dev/null | head -1); then
@@ -55,7 +88,7 @@ for t in $BINARIES; do
   fi
 done
 
-echo "[3/6] agent skills"
+echo "[4/7] agent skills"
 for s in $SKILLS; do
   missing=""
   for base in "$HOME/.agents/skills" "$HOME/.claude/skills"; do
@@ -64,7 +97,7 @@ for s in $SKILLS; do
   if [ -n "$missing" ]; then bad "$s: missing or broken symlink:$missing"; else ok "$s"; fi
 done
 
-echo "[4/6] weekly sync"
+echo "[5/7] weekly sync"
 if launchctl list 2>/dev/null | grep -q "sync-forks"; then
   ok "launchd agent loaded (Sundays 10:00)"
 else
@@ -77,7 +110,7 @@ else
   warn "no sync log yet at $LOG (runs Sundays, or run: syncforks)"
 fi
 
-echo "[5/6] auth"
+echo "[6/7] auth"
 if gh auth status >/dev/null 2>&1; then
   ok "gh authenticated"
 else
@@ -91,7 +124,7 @@ if command -v quota-axi >/dev/null 2>&1; then
   fi
 fi
 
-echo "[6/6] cross-tool defaults"
+echo "[7/7] cross-tool defaults"
 if [ -f "$HOME/AGENTS.md" ] && [ "$(readlink "$HOME/AGENTS.md")" = ".claude/CLAUDE.md" ]; then
   ok "~/AGENTS.md -> ~/.claude/CLAUDE.md"
 else
