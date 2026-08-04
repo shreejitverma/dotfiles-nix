@@ -67,6 +67,21 @@ assert_line_count() {
   return 0
 }
 
+# Asserts the first line starting with $before comes before the first line
+# starting with $after, for invariants that are about ordering rather than
+# mere presence.
+assert_order() {
+  local haystack="$1" before="$2" after="$3" msg="$4"
+  local before_at after_at
+  before_at=$(grep -nE -- "^$before" <<<"$haystack" | head -1 | cut -d: -f1)
+  after_at=$(grep -nE -- "^$after" <<<"$haystack" | head -1 | cut -d: -f1)
+  if [ -z "$before_at" ] || [ -z "$after_at" ] || [ "$before_at" -ge "$after_at" ]; then
+    fail "$msg -- '^$before' at line ${before_at:-none}, '^$after' at line ${after_at:-none}"
+    return 1
+  fi
+  return 0
+}
+
 sandbox_guard_violation() {
   local target="$1"
   local abs_sandbox="${2:-unknown}"
@@ -348,6 +363,13 @@ run_scenario() {
   assert_path_under_sandbox "$log"
   : > "$log"
   make_fixture_repo "$fixture"
+  if [ "$name" = "fresh-machine-no-lock" ]; then
+    # A fork of this repo cloned without a committed flake.lock, so the
+    # user-owned `nix flake lock` step in setup/mac.sh has to run before the
+    # sudo activation. Without it the activation writes a root-owned
+    # flake.lock into the working tree.
+    rm -f "$fixture/flake.lock"
+  fi
   write_shared_stubs "$stub_bin"
 
   export STUB_LOG="$log"
@@ -416,7 +438,19 @@ EOF
   local invocations
   invocations=$(cat "$log")
 
-  if [ "$name" = "fresh-machine" ]; then
+  if [ "$name" = "fresh-machine-no-lock" ]; then
+    assert_line_count "$invocations" "nix .*flake lock" 1 \
+      "$name: flake.lock generated as the invoking user exactly once" && pass "$name: flake.lock generated as the invoking user exactly once"
+    assert_not_contains "$invocations" "sudo .*flake lock" \
+      "$name: flake.lock generation never runs under sudo" && pass "$name: flake.lock generation never runs under sudo"
+    assert_order "$invocations" "nix .*flake lock" "sudo " \
+      "$name: flake.lock generated before the sudo activation" && pass "$name: flake.lock generated before the sudo activation"
+  else
+    assert_not_contains "$invocations" "flake lock" \
+      "$name: flake.lock left alone when it already exists" && pass "$name: flake.lock left alone when it already exists"
+  fi
+
+  if [ "$name" != "already-installed" ]; then
     assert_contains "$invocations" "curl --proto =https --tlsv1.2 -sSf -L https://install.determinate.systems/nix" \
       "$name: canonical Determinate URL requested" && pass "$name: canonical Determinate URL requested"
     assert_not_contains "$invocations" "install.determinate.sh" \
@@ -441,6 +475,7 @@ EOF
 
 test_sandbox_guard
 run_scenario "fresh-machine"
+run_scenario "fresh-machine-no-lock"
 run_scenario "already-installed"
 
 echo
