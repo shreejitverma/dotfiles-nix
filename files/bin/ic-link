@@ -10,9 +10,23 @@
 set -euo pipefail
 
 GH_ROOT="$HOME/github"
-# Derived from this script's own location (files/bin/ic-link), so the ship
-# skill is linked from the checkout actually being used.
-DOTFILES=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)
+SELF_REPO=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)
+
+# The links below are durable state in $HOME and are read long after ic-link
+# exits, so they point at the checkout nix/user.nix declares as dotfilesDir,
+# not at whatever tree ic-link happened to be invoked from. Running ic-link
+# from a git worktree therefore still writes links that survive the worktree.
+# Falls back to the invoking checkout when the literal cannot be parsed.
+declared_rel=$(sed -n 's/.*dotfilesDir = "${config\.home\.homeDirectory}\([^"]*\)".*/\1/p' \
+  "$SELF_REPO/nix/user.nix" 2>/dev/null | head -1 || true)
+if [ -n "$declared_rel" ]; then
+  DOTFILES="$HOME$declared_rel"
+else
+  DOTFILES="$SELF_REPO"
+fi
+if [ ! -d "$DOTFILES" ]; then
+  echo "ic-link: warning: declared dotfilesDir $DOTFILES does not exist; the ship skill link will dangle until the repo is cloned there" >&2
+fi
 
 # Skills whose directory name matches their repo name.
 REGULAR_SKILLS="chrome-devtools-axi gh-axi gnhf no-mistakes quota-axi tasks-axi"

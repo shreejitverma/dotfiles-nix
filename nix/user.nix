@@ -192,7 +192,7 @@ in
       rebasemst = "git rebase -i master";
       cc = "claude --dangerously-skip-permissions";
       co = "codex --full-auto";
-      rebuild = "/run/current-system/sw/bin/darwin-rebuild switch --flake ~/github/dotfiles-nix#mac";
+      rebuild = "/run/current-system/sw/bin/darwin-rebuild switch --flake ${dotfilesDir}#mac";
     };
     initContent = ''
       bindkey '^f' autosuggest-accept
