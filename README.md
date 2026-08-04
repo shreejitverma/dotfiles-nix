@@ -122,8 +122,8 @@ Run the sandboxed regression test instead:
 bash tests/mac_setup_test.sh
 ```
 
-It runs the real script logic with stub executables for `curl`, `sh`, `nix`, `darwin-rebuild`, `sudo`, and `bash`, covering a fresh-machine single-pass bootstrap, a fresh machine cloned without a committed `flake.lock`, and the already-bootstrapped fast path.
-The harness also guards every harness/stub write against sandbox escapes, re-homes `NVM_DIR` under the sandboxed `HOME`, and unsets inherited `BASH_ENV`/`ENV` hooks before invoking the script under test.
+It runs the real script logic against a sandbox of stub executables, so nothing is ever installed or activated.
+See [`tests/README.md`](tests/README.md) for the scenarios it covers and how the sandbox is guarded.
 
 ## Where to add new tools
 
@@ -216,7 +216,7 @@ A launchd agent defined in `nix/user.nix` runs it every Sunday at 10:00, logging
 
 **5. Shell ergonomics.**
 `files/zsh/ic-workflow.zsh` wires the tools into the shell: `th` (treehouse), `nm` (no-mistakes), `gn` (gnhf), `cda` (chrome-devtools-axi), `ta` (tasks-axi), `qa` (quota-axi), `fm` (firstmate), `syncforks`, and `icdoctor`.
-`files/bin/ic-doctor` is the read-only health check for all seven layers; run it whenever something feels off or after changing the setup.
+`files/bin/ic-doctor` is the read-only health check for the whole system; run it whenever something feels off or after changing the setup.
 
 **6. Cross-tool defaults.**
 `~/.claude/CLAUDE.md` is the single source of truth for agent instructions, and its "Default development system" section makes this toolchain the default for every development request.
@@ -400,7 +400,7 @@ npx skills add <owner>/<repo> --skill <name> -g   # -g = all projects (~/.claude
 ic-doctor
 ```
 
-`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check of all seven layers: this checkout's path against the `dotfilesDir` declared in `nix/user.nix`, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the launchd sync agent and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md`, and codex skills).
+`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in `nix/user.nix`, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the launchd sync agent and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md`, and codex skills).
 It exits non-zero if anything needs attention, and every failure line names the command that fixes it.
 A healthy system ends with `ic-doctor: all checks passed`.
 
