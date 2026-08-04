@@ -10,7 +10,7 @@
 set -euo pipefail
 
 GH_ROOT="$HOME/github"
-DOTFILES="$GH_ROOT/dotfiles-mac-nix"
+DOTFILES="$GH_ROOT/dotfiles-nix"
 
 # Skills whose directory name matches their repo name.
 REGULAR_SKILLS="chrome-devtools-axi gh-axi gnhf no-mistakes quota-axi tasks-axi"

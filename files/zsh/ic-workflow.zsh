@@ -40,7 +40,7 @@ alias dl='cd ~/Downloads'
 alias dt='cd ~/Desktop'
 alias docs='cd ~/Documents'
 alias gh-dir='cd ~/github'
-alias dot='cd ~/github/dotfiles-mac-nix'
+alias dot='cd ~/github/dotfiles-nix'
 alias nvc='cd ~/.config/nvim'
 
 # -----------------------------------------------------------------------------
@@ -86,8 +86,8 @@ fi
 alias e='${EDITOR:-vim}'
 alias cl='clear'
 alias reload='exec zsh'
-alias zshrc='${EDITOR:-vim} ~/github/dotfiles-mac-nix/nix/user.nix'
-alias icwf='${EDITOR:-vim} ~/github/dotfiles-mac-nix/files/zsh/ic-workflow.zsh'
+alias zshrc='${EDITOR:-vim} ~/github/dotfiles-nix/nix/user.nix'
+alias icwf='${EDITOR:-vim} ~/github/dotfiles-nix/files/zsh/ic-workflow.zsh'
 
 # -----------------------------------------------------------------------------
 # Git (rich set; complements the short aliases already defined in nix)
@@ -211,9 +211,9 @@ command -v k9s >/dev/null && alias k9='k9s'
 # -----------------------------------------------------------------------------
 # Nix / darwin
 # -----------------------------------------------------------------------------
-alias nbuild='darwin-rebuild build --flake ~/github/dotfiles-mac-nix#mac'
-alias ncheck='nix flake check ~/github/dotfiles-mac-nix'
-alias nup='nix flake update --flake ~/github/dotfiles-mac-nix'
+alias nbuild='darwin-rebuild build --flake ~/github/dotfiles-nix#mac'
+alias ncheck='nix flake check ~/github/dotfiles-nix'
+alias nup='nix flake update --flake ~/github/dotfiles-nix'
 alias ngc='nix-collect-garbage -d'
 alias nsearch='nix search nixpkgs'
 alias nrun='nix run'
@@ -395,9 +395,9 @@ command -v gnhf        >/dev/null && alias gn='gnhf'
 command -v chrome-devtools-axi >/dev/null && alias cda='chrome-devtools-axi'
 command -v tasks-axi   >/dev/null && alias ta='tasks-axi'
 command -v quota-axi   >/dev/null && alias qa='quota-axi'
-alias syncforks='$HOME/github/dotfiles-mac-nix/files/bin/sync-forks'
-alias syncforks-dry='$HOME/github/dotfiles-mac-nix/files/bin/sync-forks --dry-run'
-alias icdoctor='$HOME/github/dotfiles-mac-nix/files/bin/ic-doctor'
+alias syncforks='$HOME/github/dotfiles-nix/files/bin/sync-forks'
+alias syncforks-dry='$HOME/github/dotfiles-nix/files/bin/sync-forks --dry-run'
+alias icdoctor='$HOME/github/dotfiles-nix/files/bin/ic-doctor'
 
 # firstmate is launched from inside its workspace; cd there and optionally
 # start an agent: `firstmate` (just cd) or `firstmate claude` (cd + launch).

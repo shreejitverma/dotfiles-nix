@@ -24,7 +24,7 @@ What the script does:
 - applies the `nix-darwin` + Home Manager configuration
 - installs `nvm` and a default Node.js version if needed
 
-This script is meant for the **first bootstrap on a new Mac**. After that, most ongoing changes should happen by editing the Nix config and running `darwin-rebuild switch --flake ~/github/dotfiles-mac-nix#mac`.
+This script is meant for the **first bootstrap on a new Mac**. After that, most ongoing changes should happen by editing the Nix config and running `darwin-rebuild switch --flake ~/github/dotfiles-nix#mac`.
 
 It's designed to complete in a single run: right after installing Nix it sources the daemon profile into the current shell, and the first `nix-darwin` activation resolves `nix` by absolute path with the experimental features it needs, so you should **not** need to run it twice or open a new shell partway through.
 

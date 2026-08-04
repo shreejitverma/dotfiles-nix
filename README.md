@@ -50,8 +50,8 @@ The goal is to provide a reusable foundation that you can make your own.
 ### 1. Clone the repo
 
 ```bash
-git clone git@github.com:kunchenguid/dotfiles-mac-nix.git ~/github/dotfiles-mac-nix
-cd ~/github/dotfiles-mac-nix
+git clone git@github.com:shreejitverma/dotfiles-nix.git ~/github/dotfiles-nix
+cd ~/github/dotfiles-nix
 ```
 
 ### 2. Replace the placeholders
@@ -110,7 +110,7 @@ rebuild
 This alias is included in the shell config and expands to the repo path used in this guide:
 
 ```bash
-/run/current-system/sw/bin/darwin-rebuild switch --flake ~/github/dotfiles-mac-nix#mac
+/run/current-system/sw/bin/darwin-rebuild switch --flake ~/github/dotfiles-nix#mac
 ```
 
 ## Testing
@@ -157,7 +157,7 @@ This section documents how it is wired on my system today, and then gives the ex
 
 | Tool | What it does | Local artifact |
 |---|---|---|
-| [dotfiles-mac-nix](https://github.com/kunchenguid/dotfiles-mac-nix) | This repo: nix-darwin + Home Manager + Homebrew base system | `rebuild` alias |
+| [dotfiles-nix](https://github.com/shreejitverma/dotfiles-nix) | This repo: nix-darwin + Home Manager + Homebrew base system | `rebuild` alias |
 | [axi](https://github.com/kunchenguid/axi) | The 10 AXI principles for agent-ergonomic CLIs, plus the SDK and skill | skill only |
 | [gh-axi](https://github.com/kunchenguid/gh-axi) | GitHub (issues, PRs, CI, releases, Projects) through an agent-ergonomic CLI | `gh-axi` |
 | [tasks-axi](https://github.com/kunchenguid/tasks-axi) | Task and backlog manager for the current workspace, agent-driven | `tasks-axi` |
@@ -275,8 +275,8 @@ Nothing is assumed beyond a fresh macOS install with an admin account.
 
 ```bash
 xcode-select --install          # Apple CLT: git, make, clang (accept the GUI prompt)
-git clone https://github.com/<you>/dotfiles-mac-nix.git ~/github/dotfiles-mac-nix
-cd ~/github/dotfiles-mac-nix
+git clone https://github.com/<you>/dotfiles-nix.git ~/github/dotfiles-nix
+cd ~/github/dotfiles-nix
 bash setup/mac.sh               # installs Nix, Homebrew, applies nix-darwin + Home Manager, installs nvm + Node LTS
 exec zsh                        # pick up the new environment
 ```
@@ -456,4 +456,5 @@ The `ship` skill encodes the whole loop, so any agent in any tool can be told `/
 ## Related
 
 - Long-form write-up: [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web)
-- GitHub repo: <https://github.com/kunchenguid/dotfiles-mac-nix>
+- GitHub repo: <https://github.com/shreejitverma/dotfiles-nix>
+- Forked from [kunchenguid/dotfiles-mac-nix](https://github.com/kunchenguid/dotfiles-mac-nix), wired here as the `upstream` remote. Sync with `git fetch upstream && git merge upstream/main`.
