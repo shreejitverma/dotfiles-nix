@@ -52,7 +52,7 @@ for f in .config/wezterm/wezterm.lua .config/herdr/config.toml; do
   if [ -e "$HOME/$f" ]; then ok "~/$f resolves"; else bad "~/$f dangling or missing (run: rebuild)"; fi
 done
 if [ -f "$SELF_REPO/files/zsh/ic-workflow.zsh" ] && \
-   grep -q "$SELF_REPO/files/zsh/ic-workflow.zsh" "$HOME/.zshrc" 2>/dev/null; then
+   grep -qF "$SELF_REPO/files/zsh/ic-workflow.zsh" "$HOME/.zshrc" 2>/dev/null; then
   ok "zsh sources the IC workflow layer"
 else
   bad "~/.zshrc does not source $SELF_REPO/files/zsh/ic-workflow.zsh (run: rebuild)"

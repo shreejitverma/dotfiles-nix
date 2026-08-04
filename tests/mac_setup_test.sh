@@ -53,6 +53,19 @@ assert_not_contains() {
   return 0
 }
 
+# Regex counterpart of assert_not_contains. Absence assertions about a *shape*
+# of invocation (e.g. "sudo <anything> flake lock") need this: passing such a
+# pattern to the -F helper above compares it literally, so it can never match
+# and the assertion silently holds no matter what the script does.
+assert_not_matches() {
+  local haystack="$1" pattern="$2" msg="$3"
+  if grep -qE -- "$pattern" <<<"$haystack"; then
+    fail "$msg -- expected NO line matching: $pattern"
+    return 1
+  fi
+  return 0
+}
+
 # Counts lines whose *start* matches an extended regex, so a stub's own log
 # line (e.g. "nix ...") isn't double-counted against the "sudo nix ..."
 # wrapper line that also contains the same text as a substring.
@@ -201,6 +214,8 @@ write_sandbox_guard() {
 # guard clause at the top of setup/mac.sh lets the run proceed.
 make_fixture_repo() {
   local dest="$1"
+  assert_path_under_sandbox "$dest"
+  mkdir -p "$dest"
   cp -R "$REPO_ROOT/." "$dest"
   rm -rf "$dest/.git"
   sed -i.bak \
@@ -243,7 +258,7 @@ test_sandbox_guard() {
   rm -rf "$root"
 }
 
-# Stub executables shared by both scenarios. Every one of them only ever
+# Stub executables shared by every scenario. Every one of them only ever
 # records its invocation and fakes the minimum side effect setup/mac.sh
 # depends on -- none of them can reach the network, the Nix store, Homebrew,
 # or real root privileges.
@@ -343,7 +358,7 @@ EOF
 
 run_scenario() {
   local name="$1"
-  local sandbox stub_bin fixture home_dir log startup_env_hook startup_env_sentinel
+  local sandbox stub_bin fixture declared_checkout home_dir log startup_env_hook startup_env_sentinel
   sandbox=$(mktemp -d "${TMPDIR:-/tmp}/mac-setup-test-${name}.XXXXXX")
   if [ -z "${DEBUG_KEEP_SANDBOX:-}" ]; then
     trap 'rm -rf "$sandbox"' RETURN
@@ -352,9 +367,18 @@ run_scenario() {
   fi
 
   stub_bin="$sandbox/stub-bin"
-  fixture="$sandbox/repo"
   home_dir="$sandbox/home"
   log="$sandbox/log"
+  # nix/user.nix declares dotfilesDir under $HOME, and setup/mac.sh refuses to
+  # activate from any other path, so the fixture is checked out where the
+  # config says it lives -- except in the scenario that deliberately relocates
+  # it to prove the guard fires.
+  declared_checkout="$home_dir/github/dotfiles-nix"
+  if [ "$name" = "wrong-checkout-path" ]; then
+    fixture="$sandbox/elsewhere/dotfiles-nix"
+  else
+    fixture="$declared_checkout"
+  fi
 
   mkdir -p "$stub_bin" "$home_dir"
   export SANDBOX_ROOT="$sandbox"
@@ -423,6 +447,29 @@ EOF
   status=$?
   set -e
 
+  if [ "$name" = "wrong-checkout-path" ]; then
+    local early_invocations resolved_fixture
+    early_invocations=$(cat "$log")
+    resolved_fixture=$(cd -P -- "$fixture" && pwd)
+    if [ "$status" -eq 0 ]; then
+      fail "$name: setup/mac.sh exited 0 from a checkout that does not match dotfilesDir. Output:"$'\n'"$out"
+      return
+    fi
+    pass "$name: setup/mac.sh refused to bootstrap from the wrong checkout path"
+    assert_contains "$out" "$resolved_fixture" \
+      "$name: message names the actual checkout" && pass "$name: message names the actual checkout"
+    assert_contains "$out" "$declared_checkout" \
+      "$name: message names the declared dotfilesDir" && pass "$name: message names the declared dotfilesDir"
+    assert_contains "$out" "edit dotfilesDir in nix/user.nix" \
+      "$name: message offers both remedies" && pass "$name: message offers both remedies"
+    if [ -n "$early_invocations" ]; then
+      fail "$name: guard fired only after mutating commands ran:"$'\n'"$early_invocations"
+    else
+      pass "$name: no installer, sudo, or activation call was made"
+    fi
+    return
+  fi
+
   if [ "$status" -ne 0 ]; then
     fail "$name: setup/mac.sh exited $status. Output:"$'\n'"$out"
     cat "$log" >&2
@@ -441,7 +488,7 @@ EOF
   if [ "$name" = "fresh-machine-no-lock" ]; then
     assert_line_count "$invocations" "nix .*flake lock" 1 \
       "$name: flake.lock generated as the invoking user exactly once" && pass "$name: flake.lock generated as the invoking user exactly once"
-    assert_not_contains "$invocations" "sudo .*flake lock" \
+    assert_not_matches "$invocations" "sudo .*flake lock" \
       "$name: flake.lock generation never runs under sudo" && pass "$name: flake.lock generation never runs under sudo"
     assert_order "$invocations" "nix .*flake lock" "sudo " \
       "$name: flake.lock generated before the sudo activation" && pass "$name: flake.lock generated before the sudo activation"
@@ -477,6 +524,7 @@ test_sandbox_guard
 run_scenario "fresh-machine"
 run_scenario "fresh-machine-no-lock"
 run_scenario "already-installed"
+run_scenario "wrong-checkout-path"
 
 echo
 if [ "$FAILURES" -eq 0 ]; then

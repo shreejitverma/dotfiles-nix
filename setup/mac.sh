@@ -13,6 +13,31 @@ if grep -R -n -E 'yourname|/Users/yourname|Your Name|you@example.com' \
   exit 1
 fi
 
+# Fail early if this checkout is not where nix/user.nix says it is. Everything
+# the activation wires into the machine (the files/bin PATH entry, the zsh
+# workflow layer, the out-of-store app config symlinks, the sync-forks launchd
+# agent) is built from the dotfilesDir literal, and mkOutOfStoreSymlink does
+# not require its target to exist, so a checkout at any other path activates
+# with a zero exit status and leaves every one of those dangling. Checked here,
+# before anything mutates the machine. Tolerant of a nix/user.nix this can't
+# parse: an unreadable literal skips the guard rather than blocking bootstrap.
+declared_rel=$(sed -n 's/.*dotfilesDir = "${config\.home\.homeDirectory}\([^"]*\)".*/\1/p' \
+  "$DOTFILES_DIR/nix/user.nix" 2>/dev/null | head -1 || true)
+if [ -n "$declared_rel" ]; then
+  declared_dir="$HOME$declared_rel"
+  resolved_checkout=$(cd -P -- "$DOTFILES_DIR" && pwd)
+  resolved_declared=""
+  if [ -d "$declared_dir" ]; then
+    resolved_declared=$(cd -P -- "$declared_dir" && pwd)
+  fi
+  if [ "$resolved_declared" != "$resolved_checkout" ]; then
+    echo "This checkout is at $resolved_checkout, but nix/user.nix declares dotfilesDir=$declared_dir."
+    echo "Activating from here would leave the linked app configs, the files/bin PATH entry, the zsh workflow layer, and the sync-forks agent all pointing at a path that does not exist."
+    echo "Either clone this repo to $declared_dir, or edit dotfilesDir in nix/user.nix to match $resolved_checkout."
+    exit 1
+  fi
+fi
+
 # Install Nix via Determinate if missing
 if ! command -v nix &> /dev/null; then
   curl --proto '=https' --tlsv1.2 -sSf -L https://install.determinate.systems/nix | sh -s -- install
@@ -37,10 +62,16 @@ if ! command -v brew &> /dev/null; then
   /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 fi
 
+# Resolve nix by absolute path once, for every use below. PATH resolution can
+# still fail here even after a successful install (a relocated or missing
+# daemon profile means the source above was skipped), and sudo would not
+# inherit the sourced PATH anyway.
+NIX_BIN=$(command -v nix || echo /nix/var/nix/profiles/default/bin/nix)
+
 # Generate the flake lock as the current user first, so the sudo rebuild
 # below doesn't create a root-owned flake.lock inside your repo.
 if [ ! -f "$DOTFILES_DIR/flake.lock" ]; then
-  nix --extra-experimental-features 'nix-command flakes' \
+  "$NIX_BIN" --extra-experimental-features 'nix-command flakes' \
     flake lock "$DOTFILES_DIR"
 fi
 
@@ -51,11 +82,10 @@ if [ -x "$DARWIN_REBUILD_BIN" ]; then
   sudo "$DARWIN_REBUILD_BIN" switch --flake "$DOTFILES_DIR#mac"
 else
   # First activation: nix-darwin has never run, so darwin-rebuild doesn't
-  # exist yet and has to be fetched via `nix run`. Resolve nix by absolute
-  # path since sudo won't inherit the PATH this script just sourced, and
-  # enable the experimental features it needs in case nix.conf doesn't
+  # exist yet and has to be fetched via `nix run`. Uses the absolute $NIX_BIN
+  # resolved above since sudo won't inherit the PATH this script just sourced,
+  # and enables the experimental features it needs in case nix.conf doesn't
   # already have them.
-  NIX_BIN=$(command -v nix || echo /nix/var/nix/profiles/default/bin/nix)
   sudo "$NIX_BIN" --extra-experimental-features "nix-command flakes" \
     run nix-darwin/master#darwin-rebuild -- switch --flake "$DOTFILES_DIR#mac"
 fi

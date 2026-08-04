@@ -9,6 +9,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - `~/.config/nvim` is deliberately NOT managed by this repo. It is a separate git checkout of github.com/shreejitverma/kickstart.nvim; do not add a `home.file` symlink for it or copy an editor config into `files/`.
 - Never commit `.no-mistakes/` validation evidence to this public repo. `.no-mistakes/` is gitignored; if a validation pipeline stages evidence into a branch, drop it before merging.
 - `setup/mac.sh` generates `flake.lock` as the invoking user before the `sudo` activation, so the rebuild never leaves a root-owned lock file inside the repo. Keep that block ahead of the activation step.
+- `setup/mac.sh` fails fast when the checkout path does not match the `dotfilesDir` literal in `nix/user.nix`. `mkOutOfStoreSymlink` does not require its target to exist, so without this guard a clone at any other path activates with a zero exit status and silently leaves the app config symlinks, the `files/bin` PATH entry, the zsh workflow layer, and the `sync-forks` agent all dangling. Keep the guard ahead of the Nix install, and keep it tolerant of a `nix/user.nix` whose literal it cannot parse.
 
 ## Upstream sync
 
@@ -26,9 +27,9 @@ Upstream has marked itself superseded by `kunchenguid/dotfiles`, a different rep
 
 ## Testing setup/mac.sh
 
-Run `bash tests/mac_setup_test.sh`. It simulates a fresh Mac by copying the repo into a scratch fixture (placeholders pre-replaced), building stub `curl`/`sh`/`nix`/`darwin-rebuild`/`sudo`/`bash` executables that record invocations and fake just enough side effects (a profile script, a `nix` binary) for the script to progress, then running the real `setup/mac.sh` against that PATH-masked sandbox. It covers the fresh-machine path (single-pass activation), a fresh machine with no committed `flake.lock` (user-owned lock generation ordered ahead of the `sudo` activation), and the already-installed fast path. It never touches the real network, Nix store, Homebrew, sudo, or system state. Set `DEBUG_KEEP_SANDBOX=1` to keep the scratch sandbox around for inspection after a failing run.
+Run `bash tests/mac_setup_test.sh`. It simulates a fresh Mac by copying the repo into a scratch fixture (placeholders pre-replaced), building stub `curl`/`sh`/`nix`/`darwin-rebuild`/`sudo`/`bash` executables that record invocations and fake just enough side effects (a profile script, a `nix` binary) for the script to progress, then running the real `setup/mac.sh` against that PATH-masked sandbox. It covers the fresh-machine path (single-pass activation), a fresh machine with no committed `flake.lock` (user-owned lock generation ordered ahead of the `sudo` activation), the already-installed fast path, and a checkout relocated away from its declared `dotfilesDir` (which must abort before any installer, sudo, or activation call). It never touches the real network, Nix store, Homebrew, sudo, or system state. Set `DEBUG_KEEP_SANDBOX=1` to keep the scratch sandbox around for inspection after a failing run.
 
-Each scenario sandboxes `HOME`, re-homes `NVM_DIR` under that temp root, and unsets inherited `BASH_ENV`/`ENV` before invoking `setup/mac.sh` (an inherited absolute `NVM_DIR` from hm-session-vars would otherwise leak stub writes).
+Each scenario sandboxes `HOME`, checks the fixture out at the `dotfilesDir` the config declares under that `HOME` (except the scenario that deliberately relocates it), re-homes `NVM_DIR` under that temp root, and unsets inherited `BASH_ENV`/`ENV` before invoking `setup/mac.sh` (an inherited absolute `NVM_DIR` from hm-session-vars would otherwise leak stub writes).
 Harness and stub writes call `assert_path_under_sandbox` / `guard_write_path` so a future leak through parent traversal, symlink escape, or another absolute write path fails the test instead of mutating the host.
 
 ## Maintaining this file

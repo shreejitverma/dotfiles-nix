@@ -19,6 +19,7 @@ bash setup/mac.sh
 What the script does:
 
 - checks that you replaced the placeholder values first
+- checks that the checkout sits at the `dotfilesDir` path declared in `nix/user.nix`, since everything the activation links (app configs, the `files/bin` PATH entry, the zsh workflow layer, the `sync-forks` agent) is built from that literal and would otherwise dangle silently
 - installs Determinate Nix Installer if needed
 - installs Homebrew if needed
 - applies the `nix-darwin` + Home Manager configuration
@@ -39,6 +40,7 @@ For normal bootstrap usage, leave them unset.
 bash tests/mac_setup_test.sh
 ```
 
-This runs the actual script against a PATH-masked sandbox of stub executables that simulate a fresh Mac (and a second scenario for a machine that's already bootstrapped), without touching the network, the Nix store, Homebrew, sudo, or system state.
+This runs the actual script against a PATH-masked sandbox of stub executables, without touching the network, the Nix store, Homebrew, sudo, or system state.
+It covers four scenarios: a fresh Mac bootstrapping in a single pass, a fresh Mac cloned without a committed `flake.lock` (which must be generated as the invoking user, never under `sudo`, and strictly before the activation), a machine that is already bootstrapped and takes the `darwin-rebuild switch` fast path, and a checkout sitting at a path that does not match the `dotfilesDir` declared in `nix/user.nix` (which must fail before anything is installed or activated).
 The harness also re-homes `NVM_DIR` under the sandboxed `HOME`, unsets inherited `BASH_ENV`/`ENV`, and refuses any harness or stub write path that escapes the temp sandbox.
 See `AGENTS.md` for details.

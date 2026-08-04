@@ -10,7 +10,9 @@
 set -euo pipefail
 
 GH_ROOT="$HOME/github"
-DOTFILES="$GH_ROOT/dotfiles-nix"
+# Derived from this script's own location (files/bin/ic-link), so the ship
+# skill is linked from the checkout actually being used.
+DOTFILES=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)
 
 # Skills whose directory name matches their repo name.
 REGULAR_SKILLS="chrome-devtools-axi gh-axi gnhf no-mistakes quota-axi tasks-axi"
