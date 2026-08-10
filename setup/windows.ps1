@@ -79,12 +79,16 @@ if (-not $wsl) {
 
 # `wsl --list --quiet` emits UTF-16 with NUL bytes; strip them or every
 # comparison below silently fails to match.
+#
+# Read unconditionally, including under -DryRun: listing distros changes
+# nothing, and skipping it would make a dry run believe no distro exists, report
+# that it would install one, and exit before printing the plan it promises. The
+# @() wrapper keeps a single-distro result an array, so .Count and [0] below
+# mean what they say rather than counting characters of a bare string.
 $installed = @()
-if (-not $DryRun) {
-  $raw = (wsl.exe --list --quiet) 2>$null
-  if ($LASTEXITCODE -eq 0 -and $raw) {
-    $installed = $raw -split "`r?`n" | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ -ne '' }
-  }
+$raw = (wsl.exe --list --quiet) 2>$null
+if ($LASTEXITCODE -eq 0 -and $raw) {
+  $installed = @($raw -split "`r?`n" | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ -ne '' })
 }
 
 if ($installed.Count -eq 0) {

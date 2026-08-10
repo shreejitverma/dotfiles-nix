@@ -14,26 +14,34 @@ FLAKE=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)
 . "${FLAKE}/setup/lib/platform.sh"
 
 TARGET=$(ic_detect_target)
-PROFILE=$(ic_profile_for "$TARGET" "$(ic_detect_arch)")
+
+# Reject an unsupported platform before touching the flake, so the message below
+# is what the user sees rather than whatever the first missing tool prints.
+case "$TARGET" in
+  darwin|linux|wsl) ;;
+  *)
+    echo "up: unsupported platform '$TARGET' (supported: macOS, Linux, WSL)" >&2
+    exit 1
+    ;;
+esac
 
 bold "==> nix flake update"
 nix flake update --flake "$FLAKE"
 
 # macOS activates a whole system generation through nix-darwin. Linux and WSL
 # have no equivalent for an existing distro, so they switch the standalone Home
-# Manager generation instead.
+# Manager generation instead. The target is already validated above, so this
+# case needs no default arm; ic_profile_for is called only where its answer is
+# used, since it fails for anything else and would abort under `set -e`.
 case "$TARGET" in
   darwin)
     bold "==> darwin-rebuild switch"
     /run/current-system/sw/bin/darwin-rebuild switch --flake "${FLAKE}#mac"
     ;;
   linux|wsl)
+    PROFILE=$(ic_profile_for "$TARGET" "$(ic_detect_arch)")
     bold "==> home-manager switch ($PROFILE)"
     home-manager switch --flake "${FLAKE}#${PROFILE}"
-    ;;
-  *)
-    echo "up: unsupported platform '$TARGET'" >&2
-    exit 1
     ;;
 esac
 

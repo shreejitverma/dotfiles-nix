@@ -22,6 +22,23 @@ in
   # `rebuild` alias invokes, so without it the alias breaks after first install.
   programs.home-manager.enable = true;
 
+  # The stock login shell on Debian, Ubuntu and every WSL distro is bash, not
+  # zsh. Home Manager only writes hm-session-vars.sh into the shells it manages,
+  # so without this the session PATH (including files/bin), the environment and
+  # the aliases would exist solely in the generated .zshrc and a normal login
+  # would see none of them. Deliberately not in common.nix: macOS already logs
+  # in with zsh, and enabling bash there would generate .bashrc/.profile that
+  # nothing on that machine reads.
+  #
+  # The aliases are taken from the zsh set rather than restated, so the two can
+  # never drift and the platform-specific `rebuild` alias is inherited too. The
+  # zsh workflow layer in files/zsh is zsh-only by design and is not sourced
+  # here; setup/linux.sh prints how to switch the login shell to zsh.
+  programs.bash = {
+    enable = true;
+    shellAliases = config.programs.zsh.shellAliases;
+  };
+
   systemd.user.services.sync-forks = {
     Unit.Description = "Sync forked tooling in ~/github with their upstream parents";
     Service = {

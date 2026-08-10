@@ -80,6 +80,11 @@ line_of() {
 }
 echo "ORDER $(line_of "atuin init") $(line_of "ic-workflow.zsh") $(line_of "zsh-syntax-highlighting.zsh")"
 
+# The distro login shell is bash, so the session PATH and the aliases have to
+# survive a bash login too, not only the generated zshrc.
+bash -lc "printenv PATH" 2>/dev/null | grep -q "dotfiles-nix/files/bin" && echo BASH_PATH_OK || echo BASH_PATH_MISSING
+grep -q "alias -- rebuild=" "$HOME/.bashrc" && echo BASH_ALIAS_OK || echo BASH_ALIAS_MISSING
+
 [ -e "$HOME/.config/systemd/user/timers.target.wants/sync-forks.timer" ] && echo "TIMER_ENABLED" || echo "TIMER_NOT_ENABLED"
 [ -e "$HOME/.config/fontconfig" ] && echo "DESKTOP_YES" || echo "DESKTOP_NO"
 grep -q "alias -- open=explorer.exe" "$HOME/.zshrc" && echo "WSL_ALIASES" || echo "NO_WSL_ALIASES"
@@ -95,6 +100,8 @@ assert_in "$out" "@linux" "linux: rebuild alias names a linux profile"
 assert_in "$out" "TIMER_ENABLED" "linux: the weekly sync timer is enabled"
 assert_in "$out" "DESKTOP_YES" "linux: the desktop layer is present"
 assert_in "$out" "NO_WSL_ALIASES" "linux: WSL interop aliases are absent"
+assert_in "$out" "BASH_PATH_OK" "linux: a bash login gets files/bin on PATH"
+assert_in "$out" "BASH_ALIAS_OK" "linux: bash inherits the zsh alias set, rebuild included"
 for b in rg fd bat eza zoxide atuin starship delta jq home-manager; do
   assert_in "$out" "BIN_OK $b" "linux: $b is installed"
 done
@@ -117,6 +124,7 @@ assert_in "$out" "@wsl" "wsl: rebuild alias names a wsl profile"
 assert_in "$out" "TIMER_NOT_ENABLED" "wsl: the sync timer is left disabled, since systemd is off by default"
 assert_in "$out" "DESKTOP_NO" "wsl: the desktop layer is omitted"
 assert_in "$out" "WSL_ALIASES" "wsl: Windows interop aliases are present"
+assert_in "$out" "BASH_PATH_OK" "wsl: a bash login gets files/bin on PATH"
 
 echo
 if [ "$FAILURES" -eq 0 ]; then

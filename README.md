@@ -134,6 +134,9 @@ If you already run WSL2, skip the PowerShell script and just run `bash setup/ins
   It builds the activation package from the pinned `flake.lock` rather than running `nix run home-manager/master`, so the Home Manager doing the activation is the one this repo pins instead of whatever is current upstream.
   Where systemd is not PID 1 (WSL without `systemd=true`, containers, non-systemd distros) it installs Nix with `--init none`, because the default Linux plan registers the daemon as a systemd service.
 
+On Linux and WSL the Home Manager profile configures bash as well as zsh, because bash is the stock login shell on those platforms and the session PATH, environment, and aliases would otherwise only exist in the generated `.zshrc`.
+Bash gets the same alias set, `rebuild` included; the zsh workflow layer in `files/zsh` stays zsh-only, so `setup/linux.sh` finishes by printing the `chsh` command that switches the login shell if you want it.
+
 The `NIX_DAEMON_PROFILE`, `DARWIN_REBUILD_BIN`, `WSL_OSRELEASE_FILE`, and `WSL_VERSION_FILE` environment variables exist only so the regression tests can point the scripts at sandboxed paths.
 Normal use should leave them unset.
 
@@ -467,7 +470,8 @@ npx skills add <owner>/<repo> --skill <name> -g   # -g = all projects (~/.claude
 ic-doctor
 ```
 
-`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in `nix/user.nix`, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the launchd sync agent and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md`, and codex skills).
+`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the weekly sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md`, and codex skills).
+Checks that do not apply to a platform are reported as such rather than failed: WSL has no desktop layer, so the linked terminal configs are not expected there, and its sync timer is left disabled because systemd is off by default.
 It exits non-zero if anything needs attention, and every failure line names the command that fixes it.
 A healthy system ends with `ic-doctor: all checks passed`.
 

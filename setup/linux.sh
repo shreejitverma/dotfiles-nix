@@ -91,8 +91,26 @@ if ! command -v nix &> /dev/null; then
   # distros that use another init. Key the decision off what PID 1 actually is
   # rather than off WSL specifically, and ask for the init-less plan when there
   # is no systemd to register with.
-  if [ "$(ps -p 1 -o comm= 2>/dev/null | tr -d ' ' || echo unknown)" != "systemd" ]; then
-    echo "==> no systemd as PID 1: installing Nix with --init none"
+  #
+  # /run/systemd/system is the canonical probe (it is what sd_booted(3) tests)
+  # and needs no binaries at all. `ps` is only the fallback, and its output is
+  # captured before it is compared, so a missing procps, which prints nothing,
+  # stays distinguishable from a real answer of "not systemd". When the init
+  # system cannot be determined at all, keep the default plan: a wrongly chosen
+  # --init none leaves the nix-daemon unregistered and Nix unusable for the rest
+  # of the run, which is the worse of the two failures.
+  if [ -d /run/systemd/system ]; then
+    init_system=systemd
+  else
+    # `|| true` is load-bearing under `set -o pipefail`: a missing ps makes the
+    # pipeline exit non-zero, which would abort the script here rather than fall
+    # through to the unknown case.
+    init_system=$(ps -p 1 -o comm= 2>/dev/null | tr -d ' ' || true)
+    [ -n "$init_system" ] || init_system=unknown
+  fi
+
+  if [ "$init_system" != systemd ] && [ "$init_system" != unknown ]; then
+    echo "==> init is '$init_system', not systemd: installing Nix with --init none"
     curl --proto '=https' --tlsv1.2 -sSf -L "$DETERMINATE_INSTALLER_URL" \
       | sh -s -- install linux --init none --no-confirm
   else
@@ -154,7 +172,34 @@ if [ ! -d "$NVM_DIR" ]; then
 fi
 
 echo
-echo "Bootstrap complete. Restart your shell, then use 'rebuild' for future config changes."
+echo "Bootstrap complete. Open a new login shell (or run 'exec \$SHELL -l') to pick up"
+echo "the new PATH and environment, then use 'rebuild' for future config changes."
+
+# Both bash and zsh get this repo's PATH, environment and aliases, so the line
+# above is true whichever one the user logs in with. The zsh workflow layer in
+# files/zsh is zsh-only, though, so point a bash login at the switch rather than
+# leaving it to wonder why the workflow functions are missing. Only ever print
+# the command: changing someone's login shell without being asked is not this
+# script's call.
+login_shell=$(getent passwd "$(id -un)" 2>/dev/null | sed -n 's/.*:\([^:]*\)$/\1/p' | head -1 || true)
+[ -n "$login_shell" ] || login_shell="${SHELL:-}"
+case "${login_shell##*/}" in
+  zsh) ;;
+  *)
+    zsh_bin=$(command -v zsh 2>/dev/null || true)
+    if [ -z "$zsh_bin" ] && [ -x "$HOME/.nix-profile/bin/zsh" ]; then
+      zsh_bin="$HOME/.nix-profile/bin/zsh"
+    fi
+    echo
+    echo "Your login shell is ${login_shell:-unknown}, not zsh. Everything above works in bash,"
+    echo "but the zsh workflow layer (files/zsh/ic-workflow.zsh) only loads under zsh."
+    if [ -n "$zsh_bin" ]; then
+      echo "To switch:  chsh -s $zsh_bin"
+      echo "If chsh refuses because that shell is not listed, add it first:"
+      echo "  echo $zsh_bin | sudo tee -a /etc/shells"
+    fi
+    ;;
+esac
 if [ "$IS_WSL" -eq 1 ]; then
   echo "Note: the weekly fork sync timer is not enabled on WSL, because systemd is off by default there."
   echo "Run 'syncforks' by hand, or enable systemd in /etc/wsl.conf."
