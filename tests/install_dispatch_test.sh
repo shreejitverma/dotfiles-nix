@@ -103,6 +103,21 @@ echo "5.15.153.1-microsoft-standard-WSL2" >"$WSL_PROC"
 PLAIN_PROC="$SANDBOX/osrelease-plain"; guard_write_path "$PLAIN_PROC"
 echo "6.8.0-generic" >"$PLAIN_PROC"
 
+# Stubs for the two binaries that could reach the outside world: the Determinate
+# installer download and every real `nix` invocation. Both announce themselves on
+# stderr and fail, so any case that gets far enough to call one stops there and
+# says so in the captured output, instead of running for real. Every invocation
+# of setup/linux.sh below leads its PATH with this directory: a masked-down
+# PATH of /usr/bin:/bin is not enough on its own, because a stock macOS or Linux
+# host has a real curl sitting in it.
+NOINSTALL="$SANDBOX/stubs-noinstall"
+mkdir -p "$NOINSTALL"
+guard_write_path "$NOINSTALL/curl"
+printf '#!/bin/bash\necho "STUB_CURL_CALLED $*" >&2\nexit 1\n' >"$NOINSTALL/curl"
+guard_write_path "$NOINSTALL/nix"
+printf '#!/bin/bash\necho "STUB_NIX_CALLED $*" >&2\nexit 1\n' >"$NOINSTALL/nix"
+chmod +x "$NOINSTALL/curl" "$NOINSTALL/nix"
+
 DARWIN_ARM=$(make_uname_stub darwin-arm Darwin arm64)
 DARWIN_X86=$(make_uname_stub darwin-x86 Darwin x86_64)
 LINUX_X86=$(make_uname_stub linux-x86 Linux x86_64)
@@ -204,20 +219,20 @@ assert_contains "$out" "dry-run: nothing was installed." "--dry-run says it inst
 
 # --- linux.sh rejects a profile it has no entry module for -------------------
 
-out=$(env -i HOME="$SANDBOX/home" PATH="/usr/bin:/bin" \
+out=$(env -i HOME="$SANDBOX/home" PATH="$NOINSTALL:/usr/bin:/bin" \
   "$REAL_BASH" "$REPO_ROOT/setup/linux.sh" --profile nonsense </dev/null 2>&1)
 assert_contains "$out" "Unknown profile 'nonsense'" "linux.sh rejects an unknown profile"
 
-out=$(env -i HOME="$SANDBOX/home" PATH="/usr/bin:/bin" \
+out=$(env -i HOME="$SANDBOX/home" PATH="$NOINSTALL:/usr/bin:/bin" \
   "$REAL_BASH" "$REPO_ROOT/setup/linux.sh" </dev/null 2>&1)
 assert_contains "$out" "No --profile given" "linux.sh refuses to guess when given no profile"
 
 # --- linux.sh refuses a checkout that is not where its entry module says ------
 # This is what stops a WSL install from running against a /mnt/c checkout, whose
 # absolute links would resolve only while the Windows drive is mounted. The
-# fixture sits at a deliberately wrong path, so the guard must fire; PATH is
-# masked down to coreutils so that even if the guard ever regressed, there is no
-# curl and no nix for the rest of the script to reach an installer with.
+# fixture sits at a deliberately wrong path, so the guard must fire; PATH leads
+# with the failing curl and nix stubs so that even if the guard ever regressed,
+# the rest of the script has no way to reach a real installer or a real build.
 FIXTURE="$SANDBOX/wrong-place/dotfiles-nix"
 mkdir -p "$FIXTURE/nix/home" "$FIXTURE/setup/lib" "$SANDBOX/home"
 for f in nix/linux-user.nix nix/wsl-user.nix nix/user.nix nix/host.nix \
@@ -229,12 +244,14 @@ for f in nix/linux-user.nix nix/wsl-user.nix nix/user.nix nix/host.nix \
 done
 
 for profile in shreejitverma@linux shreejitverma@wsl; do
-  out=$(env -i HOME="$SANDBOX/home" PATH="/usr/bin:/bin" \
+  out=$(env -i HOME="$SANDBOX/home" PATH="$NOINSTALL:/usr/bin:/bin" \
     "$REAL_BASH" "$FIXTURE/setup/linux.sh" --profile "$profile" </dev/null 2>&1)
   status=$?
   assert_contains "$out" "declares dotfilesDir=" "linux.sh ($profile) refuses a checkout at the wrong path"
   assert_contains "$out" "$SANDBOX/home/github/dotfiles-nix" "linux.sh ($profile) names the declared path"
   assert_not_contains "$out" "building" "linux.sh ($profile) never reaches the build step"
+  assert_not_contains "$out" "STUB_CURL_CALLED" "linux.sh ($profile) never reaches the Nix installer"
+  assert_not_contains "$out" "STUB_NIX_CALLED" "linux.sh ($profile) never invokes nix at the wrong path"
   [ "$status" -ne 0 ] && pass "linux.sh ($profile) exits non-zero at the wrong path" \
     || fail "linux.sh ($profile) exits non-zero at the wrong path -- got $status"
 done
@@ -271,12 +288,12 @@ fi
 # activation with "would be clobbered" only after the whole build had run. The
 # guard has to fire before any of that. The fixture sits at the path the entry
 # module declares, so the checkout guard above passes and this one is what
-# stops the run; PATH leads with a stub curl that fails loudly, so reaching the
-# Determinate installer would show up as an assertion failure rather than as a
-# real download.
+# stops the run; PATH leads with the stub curl and nix, which fail loudly, so
+# reaching the Determinate installer or a build would show up as an assertion
+# failure rather than as a real download.
 GOOD_HOME="$SANDBOX/home-symlink"
 GOOD_FIXTURE="$GOOD_HOME/github/dotfiles-nix"
-mkdir -p "$GOOD_FIXTURE/nix/home" "$GOOD_FIXTURE/setup/lib" "$SANDBOX/stubs-nocurl"
+mkdir -p "$GOOD_FIXTURE/nix/home" "$GOOD_FIXTURE/setup/lib"
 for f in nix/linux-user.nix nix/wsl-user.nix nix/user.nix nix/host.nix \
          nix/home/dotfiles.nix nix/home/common.nix nix/home/desktop.nix \
          nix/home/darwin.nix nix/home/linux.nix nix/home/wsl.nix \
@@ -284,10 +301,6 @@ for f in nix/linux-user.nix nix/wsl-user.nix nix/user.nix nix/host.nix \
   guard_write_path "$GOOD_FIXTURE/$f"
   cp "$REPO_ROOT/$f" "$GOOD_FIXTURE/$f"
 done
-guard_write_path "$SANDBOX/stubs-nocurl/curl"
-printf '#!/bin/bash\necho "STUB_CURL_CALLED $*"\nexit 1\n' >"$SANDBOX/stubs-nocurl/curl"
-chmod +x "$SANDBOX/stubs-nocurl/curl"
-
 # A real file is backed up, so it is announced and the run continues; a symlink
 # out of a personal dotfiles checkout is the case that has to stop.
 guard_write_path "$GOOD_HOME/elsewhere-bashrc"
@@ -297,7 +310,7 @@ ln -sfn "$GOOD_HOME/elsewhere-bashrc" "$GOOD_HOME/.bashrc"
 guard_write_path "$GOOD_HOME/.profile"
 printf '# distro default\n' >"$GOOD_HOME/.profile"
 
-out=$(env -i HOME="$GOOD_HOME" PATH="$SANDBOX/stubs-nocurl:/usr/bin:/bin" \
+out=$(env -i HOME="$GOOD_HOME" PATH="$NOINSTALL:/usr/bin:/bin" \
   "$REAL_BASH" "$GOOD_FIXTURE/setup/linux.sh" --profile shreejitverma@linux </dev/null 2>&1)
 status=$?
 assert_contains "$out" "$GOOD_HOME/.bashrc" "linux.sh names the symlinked startup file it cannot back up"
@@ -310,7 +323,7 @@ assert_not_contains "$out" "STUB_CURL_CALLED" "linux.sh never reaches the Nix in
 
 # With the symlink gone, the regular ~/.profile is announced rather than blocking.
 rm -f "$GOOD_HOME/.bashrc"
-out=$(env -i HOME="$GOOD_HOME" PATH="$SANDBOX/stubs-nocurl:/usr/bin:/bin" \
+out=$(env -i HOME="$GOOD_HOME" PATH="$NOINSTALL:/usr/bin:/bin" \
   "$REAL_BASH" "$GOOD_FIXTURE/setup/linux.sh" --profile shreejitverma@linux </dev/null 2>&1)
 assert_contains "$out" "kept as $GOOD_HOME/.profile.backup" \
   "linux.sh announces the regular startup file it will back up"
@@ -350,18 +363,32 @@ out=$(env -i HOME="$ALT_HOME" PATH="$LINUX_X86:/usr/bin:/bin" \
 assert_contains "$out" "profile: alice@linux" "install.sh derives the profile name from the flake's username literal"
 assert_not_contains "$out" "profile: shreejitverma@linux" "install.sh does not fall back to a restated username"
 
-out=$(env -i HOME="$ALT_HOME" PATH="$SANDBOX/stubs-nocurl:/usr/bin:/bin" \
+out=$(env -i HOME="$ALT_HOME" PATH="$NOINSTALL:/usr/bin:/bin" \
   "$REAL_BASH" "$ALT_FIXTURE/setup/linux.sh" --profile shreejitverma@linux </dev/null 2>&1)
 status=$?
 assert_contains "$out" 'flake.nix declares username = "alice"' \
   "linux.sh rejects a profile the flake's username does not build, naming the real cause"
 assert_not_contains "$out" "STUB_CURL_CALLED" "linux.sh rejects the stale profile before installing Nix"
+assert_not_contains "$out" "STUB_NIX_CALLED" "linux.sh rejects the stale profile before invoking nix"
 [ "$status" -ne 0 ] && pass "linux.sh exits non-zero on a profile the flake does not define" \
   || fail "linux.sh exits non-zero on a profile the flake does not define -- got $status"
 
-out=$(env -i HOME="$ALT_HOME" PATH="$SANDBOX/stubs-nocurl:/usr/bin:/bin" \
+# The matching accept case, and the only one in this suite that clears every
+# guard: the fixture sits at its declared path and ALT_HOME has no startup files,
+# so the run carries on into the Nix half of the script. That is exactly why the
+# stub `nix` matters here rather than being left to the stub curl and pipefail to
+# stop by accident: with a real nix anywhere on PATH the installer branch is
+# skipped outright and the next step is a genuine `nix flake lock` and build
+# against the fixture. The stub is reached, announces itself, and fails, so the
+# assertions can say where the run stopped instead of only what it did not print.
+out=$(env -i HOME="$ALT_HOME" PATH="$NOINSTALL:/usr/bin:/bin" \
   "$REAL_BASH" "$ALT_FIXTURE/setup/linux.sh" --profile alice@linux </dev/null 2>&1)
 assert_not_contains "$out" "Unknown profile" "linux.sh accepts the profile the flake's username does build"
+assert_contains "$out" "STUB_NIX_CALLED" \
+  "the accepted profile clears the profile, checkout-path and startup-file guards"
+assert_contains "$out" "flake lock" "the accepted profile stops at the stubbed nix, before any build"
+assert_not_contains "$out" "==> building" "the accepted profile never reaches the build step"
+assert_not_contains "$out" "==> activating" "the accepted profile never reaches activation"
 
 echo
 if [ "$FAILURES" -eq 0 ]; then

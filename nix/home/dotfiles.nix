@@ -7,8 +7,13 @@
 # symlinks, and the sync-forks agent or timer. Before this module existed the
 # same let-binding was repeated in each layer, so one layer could be edited on
 # its own and silently repoint just the paths it derived, with no assertion to
-# catch the drift. readOnly makes a second definition a build error rather than
-# a divergence.
+# catch the drift; a single definition is what removes that.
+#
+# readOnly is a backstop, not the guarantee: nixpkgs only throws once there is
+# more than one real definition, and the value below is a default rather than a
+# definition, so the first `ic.dotfilesDir = ...` added anywhere would be
+# accepted and would repoint every layer at once. What actually holds the
+# invariant is the assertion each entry module carries against its own literal.
 #
 # Derived from home.homeDirectory rather than hardcoded, so the same expression
 # resolves to /Users/<user>/... on macOS and /home/<user>/... on Linux and WSL.
