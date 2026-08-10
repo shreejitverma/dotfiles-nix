@@ -136,6 +136,8 @@ If you already run WSL2, skip the PowerShell script and just run `bash setup/ins
 
 On Linux and WSL the Home Manager profile configures bash as well as zsh, because bash is the stock login shell on those platforms and the session PATH, environment, and aliases would otherwise only exist in the generated `.zshrc`.
 Bash gets the same alias set, `rebuild` included; the zsh workflow layer in `files/zsh` stays zsh-only, so `setup/linux.sh` finishes by printing the `chsh` command that switches the login shell if you want it.
+That also means Home Manager owns `~/.bashrc`, `~/.bash_profile`, and `~/.profile` there, the same way it already owns `~/.zshrc`.
+On a machine that already had those files, `setup/linux.sh` names each one before it activates and the originals are preserved as `<file>.backup`.
 
 The `NIX_DAEMON_PROFILE`, `DARWIN_REBUILD_BIN`, `WSL_OSRELEASE_FILE`, and `WSL_VERSION_FILE` environment variables exist only so the regression tests can point the scripts at sandboxed paths.
 Normal use should leave them unset.
@@ -511,6 +513,10 @@ The checklist when adopting the next tool, so it inherits all five layers:
 - **The Nix installer fails on WSL or in a container complaining about systemd.**
   The Determinate installer's default Linux plan registers the daemon as a systemd service, which cannot work where systemd is not PID 1.
   `setup/linux.sh` detects that and installs with `--init none` instead. WSL only runs systemd if you enable it explicitly in `/etc/wsl.conf`.
+- **My `~/.bashrc` was replaced on Linux or WSL.**
+  The Linux and WSL profiles manage the bash startup files (`~/.bashrc`, `~/.bash_profile`, `~/.profile`) as well as `~/.zshrc`, which is what makes this repo's `PATH`, session variables, and aliases work in a bash login shell rather than only under zsh.
+  `setup/linux.sh` names each file it is about to take over before it activates, and every original is preserved next to it as `<file>.backup`, so `mv ~/.bashrc.backup ~/.bashrc` puts the distro default back.
+  If you later recreate a real `~/.bashrc` while `~/.bashrc.backup` is still there, the next activation stops with `Existing file ... would be clobbered by backing up ...` rather than overwriting the backup; move or delete the stale `.backup` file and retry.
 - **The weekly fork sync never runs on WSL.**
   That is deliberate: the timer is shipped disabled there because systemd is off by default.
   Run `syncforks` by hand, or enable systemd in `/etc/wsl.conf` and switch to the Linux profile behaviour.

@@ -159,7 +159,39 @@ mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles"
 
 # Back up rather than fail when a real file is already sitting where Home
 # Manager wants to write a symlink (a distro-provided ~/.zshrc, for example).
-HOME_MANAGER_BACKUP_EXT="${HOME_MANAGER_BACKUP_EXT:-backup}" \
+# One variable so the extension named in the notice below is the extension
+# actually used, even when the caller overrides it.
+HM_BACKUP_EXT="${HOME_MANAGER_BACKUP_EXT:-backup}"
+
+# These profiles enable programs.bash, so Home Manager owns the bash startup
+# files here and replaces any distro-provided ones with symlinks into the store.
+# That is deliberate (it is what puts PATH, session variables and aliases into a
+# bash login), but on an existing machine it is a surprise unless it is named
+# before it happens. Files that are already symlinks into the store are ours
+# from a previous run and are not displaced. Deliberately informational: this
+# script has to stay usable non-interactively, so it never waits for an answer.
+displaced=()
+for f in .bashrc .bash_profile .profile; do
+  p="$HOME/$f"
+  if [ -e "$p" ] || [ -L "$p" ]; then
+    case "$(readlink "$p" 2>/dev/null || true)" in
+      /nix/store/*) ;;
+      *) displaced+=("$p") ;;
+    esac
+  fi
+done
+if [ "${#displaced[@]}" -gt 0 ]; then
+  echo
+  echo "Note: this profile manages the bash startup files, so the following are about to"
+  echo "become symlinks into the Nix store. Each original is preserved next to it:"
+  for p in "${displaced[@]}"; do
+    echo "  $p  ->  kept as $p.$HM_BACKUP_EXT"
+  done
+  echo "Nothing is deleted; 'mv <file>.$HM_BACKUP_EXT <file>' puts one back."
+  echo
+fi
+
+HOME_MANAGER_BACKUP_EXT="$HM_BACKUP_EXT" \
   "$ACTIVATION_PACKAGE/activate"
 
 # Install nvm and a default Node.js if missing, matching setup/mac.sh.
@@ -174,6 +206,10 @@ fi
 echo
 echo "Bootstrap complete. Open a new login shell (or run 'exec \$SHELL -l') to pick up"
 echo "the new PATH and environment, then use 'rebuild' for future config changes."
+if [ "${#displaced[@]}" -gt 0 ]; then
+  echo "Your previous shell startup files are the .$HM_BACKUP_EXT copies listed above;"
+  echo "'mv <file>.$HM_BACKUP_EXT <file>' restores the distro default."
+fi
 
 # Both bash and zsh get this repo's PATH, environment and aliases, so the line
 # above is true whichever one the user logs in with. The zsh workflow layer in
