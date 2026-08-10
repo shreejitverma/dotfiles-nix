@@ -83,6 +83,65 @@ if [ -n "$declared_rel" ]; then
   fi
 fi
 
+# These profiles configure bash and zsh, so Home Manager owns the shell startup
+# files and replaces any the machine already has. Classify them here, before
+# anything is installed or built, because the two cases end very differently.
+#
+# A regular file is backed up, so it only needs announcing. A symlink is not:
+# Home Manager's check-link-targets.sh gates both of its backup branches on the
+# target not being a symlink, so HOME_MANAGER_BACKUP_EXT never applies to one,
+# and activation aborts with an opaque "would be clobbered" only after the whole
+# build has run. Symlinking a startup file out of a personal dotfiles checkout
+# is a common state for someone adopting this repo, so stop up front with the
+# path named instead. Broken symlinks are left out: Home Manager replaces those
+# with `ln -Tsf` and never reaches a collision check, exactly as its own
+# `-L && -e` classification implies.
+#
+# Detect, explain, abort. Nothing here moves or rewrites a user's file, and
+# nothing waits for an answer: this script has to keep working under --yes, in
+# CI, and over the stdin pipe setup/windows.ps1 uses.
+HM_BACKUP_EXT="${HOME_MANAGER_BACKUP_EXT:-backup}"
+hm_displaced=()
+hm_blocking=()
+for f in .bashrc .bash_profile .profile .zshrc .zshenv .zprofile; do
+  p="$HOME/$f"
+  if [ -L "$p" ] && [ -e "$p" ]; then
+    # The same pattern Home Manager uses to recognise a link of its own.
+    case "$(readlink "$p" 2>/dev/null || true)" in
+      /nix/store/*-home-manager-files/*) ;;
+      *) hm_blocking+=("$p") ;;
+    esac
+  elif [ ! -L "$p" ] && [ -e "$p" ]; then
+    hm_displaced+=("$p")
+  fi
+done
+
+if [ "${#hm_blocking[@]}" -gt 0 ]; then
+  echo "These shell startup files are symlinks that Home Manager does not own:" >&2
+  for p in "${hm_blocking[@]}"; do
+    echo "  $p -> $(readlink "$p" 2>/dev/null || true)" >&2
+  done
+  echo >&2
+  echo "Home Manager backs up a regular file it has to replace, but never a symlink," >&2
+  echo "so activating now would fail partway through with 'would be clobbered'." >&2
+  echo "Move each one aside, then re-run this script:" >&2
+  for p in "${hm_blocking[@]}"; do
+    echo "  mv $p $p.pre-home-manager" >&2
+  done
+  exit 1
+fi
+
+if [ "${#hm_displaced[@]}" -gt 0 ]; then
+  echo
+  echo "Note: this profile manages the shell startup files, so the following are about to"
+  echo "become symlinks into the Nix store. Each original is preserved next to it:"
+  for p in "${hm_displaced[@]}"; do
+    echo "  $p  ->  kept as $p.$HM_BACKUP_EXT"
+  done
+  echo "Nothing is deleted; 'mv <file>.$HM_BACKUP_EXT <file>' puts one back."
+  echo
+fi
+
 # Install Nix via Determinate if missing.
 if ! command -v nix &> /dev/null; then
   # The installer's default Linux plan registers the Nix daemon as a systemd
@@ -159,38 +218,8 @@ mkdir -p "${XDG_STATE_HOME:-$HOME/.local/state}/nix/profiles"
 
 # Back up rather than fail when a real file is already sitting where Home
 # Manager wants to write a symlink (a distro-provided ~/.zshrc, for example).
-# One variable so the extension named in the notice below is the extension
-# actually used, even when the caller overrides it.
-HM_BACKUP_EXT="${HOME_MANAGER_BACKUP_EXT:-backup}"
-
-# These profiles enable programs.bash, so Home Manager owns the bash startup
-# files here and replaces any distro-provided ones with symlinks into the store.
-# That is deliberate (it is what puts PATH, session variables and aliases into a
-# bash login), but on an existing machine it is a surprise unless it is named
-# before it happens. Files that are already symlinks into the store are ours
-# from a previous run and are not displaced. Deliberately informational: this
-# script has to stay usable non-interactively, so it never waits for an answer.
-displaced=()
-for f in .bashrc .bash_profile .profile; do
-  p="$HOME/$f"
-  if [ -e "$p" ] || [ -L "$p" ]; then
-    case "$(readlink "$p" 2>/dev/null || true)" in
-      /nix/store/*) ;;
-      *) displaced+=("$p") ;;
-    esac
-  fi
-done
-if [ "${#displaced[@]}" -gt 0 ]; then
-  echo
-  echo "Note: this profile manages the bash startup files, so the following are about to"
-  echo "become symlinks into the Nix store. Each original is preserved next to it:"
-  for p in "${displaced[@]}"; do
-    echo "  $p  ->  kept as $p.$HM_BACKUP_EXT"
-  done
-  echo "Nothing is deleted; 'mv <file>.$HM_BACKUP_EXT <file>' puts one back."
-  echo
-fi
-
+# The extension comes from the pre-flight above, so the one named in its notice
+# is the one actually used, even when the caller overrides it.
 HOME_MANAGER_BACKUP_EXT="$HM_BACKUP_EXT" \
   "$ACTIVATION_PACKAGE/activate"
 
@@ -206,9 +235,10 @@ fi
 echo
 echo "Bootstrap complete. Open a new login shell (or run 'exec \$SHELL -l') to pick up"
 echo "the new PATH and environment, then use 'rebuild' for future config changes."
-if [ "${#displaced[@]}" -gt 0 ]; then
+if [ "${#hm_displaced[@]}" -gt 0 ]; then
   echo "Your previous shell startup files are the .$HM_BACKUP_EXT copies listed above;"
-  echo "'mv <file>.$HM_BACKUP_EXT <file>' restores the distro default."
+  echo "'mv <file>.$HM_BACKUP_EXT <file>' restores one until the next rebuild takes it over"
+  echo "again. To keep something for good, put it in programs.bash.initExtra in nix/home/linux.nix."
 fi
 
 # Both bash and zsh get this repo's PATH, environment and aliases, so the line

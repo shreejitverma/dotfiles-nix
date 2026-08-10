@@ -225,6 +225,58 @@ for profile in shreejitverma@linux shreejitverma@wsl; do
     || fail "linux.sh ($profile) exits non-zero at the wrong path -- got $status"
 done
 
+# --- linux.sh refuses to activate over a startup file it cannot back up ------
+# Home Manager backs up a regular file it has to replace, but its collision
+# check skips the backup for a symlink, so a symlinked ~/.bashrc would abort
+# activation with "would be clobbered" only after the whole build had run. The
+# guard has to fire before any of that. The fixture sits at the path the entry
+# module declares, so the checkout guard above passes and this one is what
+# stops the run; PATH leads with a stub curl that fails loudly, so reaching the
+# Determinate installer would show up as an assertion failure rather than as a
+# real download.
+GOOD_HOME="$SANDBOX/home-symlink"
+GOOD_FIXTURE="$GOOD_HOME/github/dotfiles-nix"
+mkdir -p "$GOOD_FIXTURE/nix/home" "$GOOD_FIXTURE/setup/lib" "$SANDBOX/stubs-nocurl"
+for f in nix/linux-user.nix nix/wsl-user.nix nix/user.nix nix/host.nix \
+         nix/home/common.nix nix/home/desktop.nix nix/home/darwin.nix \
+         nix/home/linux.nix nix/home/wsl.nix \
+         setup/linux.sh setup/install.sh setup/lib/platform.sh flake.nix; do
+  guard_write_path "$GOOD_FIXTURE/$f"
+  cp "$REPO_ROOT/$f" "$GOOD_FIXTURE/$f"
+done
+guard_write_path "$SANDBOX/stubs-nocurl/curl"
+printf '#!/bin/bash\necho "STUB_CURL_CALLED $*"\nexit 1\n' >"$SANDBOX/stubs-nocurl/curl"
+chmod +x "$SANDBOX/stubs-nocurl/curl"
+
+# A real file is backed up, so it is announced and the run continues; a symlink
+# out of a personal dotfiles checkout is the case that has to stop.
+guard_write_path "$GOOD_HOME/elsewhere-bashrc"
+printf 'export PS1="mine> "\n' >"$GOOD_HOME/elsewhere-bashrc"
+guard_write_path "$GOOD_HOME/.bashrc"
+ln -sfn "$GOOD_HOME/elsewhere-bashrc" "$GOOD_HOME/.bashrc"
+guard_write_path "$GOOD_HOME/.profile"
+printf '# distro default\n' >"$GOOD_HOME/.profile"
+
+out=$(env -i HOME="$GOOD_HOME" PATH="$SANDBOX/stubs-nocurl:/usr/bin:/bin" \
+  "$REAL_BASH" "$GOOD_FIXTURE/setup/linux.sh" --profile shreejitverma@linux </dev/null 2>&1)
+status=$?
+assert_contains "$out" "$GOOD_HOME/.bashrc" "linux.sh names the symlinked startup file it cannot back up"
+assert_contains "$out" "mv $GOOD_HOME/.bashrc $GOOD_HOME/.bashrc.pre-home-manager" \
+  "linux.sh gives the exact command to move it aside"
+assert_not_contains "$out" "building" "linux.sh never reaches the build step"
+assert_not_contains "$out" "STUB_CURL_CALLED" "linux.sh never reaches the Nix installer"
+[ "$status" -ne 0 ] && pass "linux.sh exits non-zero on an unbackupable startup file" \
+  || fail "linux.sh exits non-zero on an unbackupable startup file -- got $status"
+
+# With the symlink gone, the regular ~/.profile is announced rather than blocking.
+rm -f "$GOOD_HOME/.bashrc"
+out=$(env -i HOME="$GOOD_HOME" PATH="$SANDBOX/stubs-nocurl:/usr/bin:/bin" \
+  "$REAL_BASH" "$GOOD_FIXTURE/setup/linux.sh" --profile shreejitverma@linux </dev/null 2>&1)
+assert_contains "$out" "kept as $GOOD_HOME/.profile.backup" \
+  "linux.sh announces the regular startup file it will back up"
+assert_not_contains "$out" "Home Manager backs up a regular file" \
+  "linux.sh does not block on a regular startup file"
+
 echo
 if [ "$FAILURES" -eq 0 ]; then
   echo "All checks passed."
