@@ -1,0 +1,223 @@
+{ config, lib, pkgs, ... }:
+
+# Cross-platform Home Manager layer: everything that is identical on macOS,
+# Linux, and WSL. Anything that depends on the platform lives in darwin.nix,
+# linux.nix, wsl.nix, or desktop.nix and is composed on top of this.
+#
+# dotfilesDir is derived from home.homeDirectory rather than hardcoded, so the
+# same expression resolves to /Users/<user>/... on macOS and /home/<user>/...
+# on Linux and WSL.
+
+let
+  dotfilesDir = "${config.home.homeDirectory}/github/dotfiles-nix";
+in
+{
+  home.username = "shreejitverma";
+  home.stateVersion = "23.11";
+  home.language.base = "en_US.UTF-8";
+
+  home.packages = with pkgs; [
+    git
+    curl
+    wget
+    jq
+    fd
+    fastfetch
+    ripgrep
+    killall
+    lazygit
+    tree
+    bun
+    rustup
+    zip
+    unzip
+
+    # IC workflow CLI tools.
+    # eza, zoxide, delta, atuin, bat, fzf are installed by the programs.* modules below.
+    just
+    dust
+    duf
+    procs
+    sd
+    btop
+    tokei
+    tealdeer
+    uv
+    ruff
+    difftastic
+  ];
+
+  home.sessionVariables = {
+    EDITOR = "vim";
+  };
+
+  # Keep user-local binaries (e.g. the Claude CLI) and repo scripts on PATH.
+  home.sessionPath = [
+    "$HOME/.local/bin"
+    "${dotfilesDir}/files/bin"
+  ];
+
+  programs.git = {
+    enable = true;
+    lfs.enable = true;
+    signing.format = null;
+    settings = {
+      user = {
+        name = "Shreejit Verma";
+        email = "shreejitverma@gmail.com";
+      };
+      core.editor = "vim";
+      color.ui = true;
+      push.autoSetupRemote = true;
+      pull.rebase = true;
+      rebase.updateRefs = true;
+      init.defaultBranch = "main";
+      merge.conflictStyle = "zdiff3";
+      diff.algorithm = "histogram";
+      diff.colorMoved = "default";
+      fetch.prune = true;
+      rerere.enabled = true;
+    };
+  };
+
+  programs.delta = {
+    enable = true;
+    enableGitIntegration = true;
+    options = {
+      navigate = true;
+      line-numbers = true;
+      side-by-side = false;
+      syntax-theme = "TwoDark";
+    };
+  };
+
+  programs.starship = {
+    enable = true;
+    settings = {
+      command_timeout = 1000;
+      add_newline = false;
+      format = "$username$hostname$directory$git_branch$git_state$git_status$cmd_duration$line_break$character";
+
+      directory.style = "blue";
+
+      character = {
+        success_symbol = "[❯](purple)";
+        error_symbol = "[❯](red)";
+        vimcmd_symbol = "[❮](green)";
+      };
+
+      git_branch = {
+        format = "[$branch]($style)";
+        style = "bright-black";
+      };
+
+      git_status = {
+        format = "[[(*$conflicted$untracked$modified$staged$renamed$deleted)](218) ($ahead_behind$stashed)]($style)";
+        style = "cyan";
+        stashed = "≡";
+      };
+
+      git_state = {
+        format = "\\([$state( $progress_current/$progress_total)]($style)\\) ";
+        style = "bright-black";
+      };
+
+      cmd_duration = {
+        format = "[$duration]($style) ";
+        style = "yellow";
+      };
+
+      python = {
+        format = "[$virtualenv]($style) ";
+        style = "bright-black";
+      };
+    };
+  };
+
+  # Modern CLI tools with first-class zsh integration, wired reproducibly.
+  programs.eza.enable = true;
+
+  programs.bat = {
+    enable = true;
+    config = {
+      theme = "TwoDark";
+      style = "numbers,changes,header";
+    };
+  };
+
+  programs.fzf = {
+    enable = true;
+    enableZshIntegration = true;
+    defaultCommand = "fd --type f --hidden --follow --exclude .git";
+    defaultOptions = [ "--height 60%" "--layout=reverse" "--border" "--info=inline" ];
+    fileWidget = {
+      command = "fd --type f --hidden --follow --exclude .git";
+      options = [ "--preview 'bat --style=numbers --color=always {} 2>/dev/null || cat {}'" ];
+    };
+    changeDirWidget = {
+      command = "fd --type d --hidden --follow --exclude .git";
+      options = [ "--preview 'eza --tree --level=2 --color=always {} 2>/dev/null || ls {}'" ];
+    };
+    # Atuin owns Ctrl-R: its zsh integration is sourced after fzf's, so it already
+    # won this binding. Ceding it explicitly keeps the behavior but drops the
+    # ambiguity Home Manager now warns about.
+    historyWidget.command = "";
+  };
+
+  programs.zoxide = {
+    enable = true;
+    enableZshIntegration = true;
+  };
+
+  programs.atuin = {
+    enable = true;
+    enableZshIntegration = true;
+    flags = [ "--disable-up-arrow" ];
+  };
+
+  programs.direnv = {
+    enable = true;
+    nix-direnv.enable = true;
+  };
+
+  # The `rebuild` alias is platform-specific and is contributed by darwin.nix
+  # or linux.nix; Home Manager merges it into the shellAliases set below.
+  programs.zsh = {
+    enable = true;
+    autosuggestion.enable = true;
+    syntaxHighlighting.enable = true;
+    shellAliases = {
+      ".." = "cd ..";
+      m = "git switch main";
+      mst = "git switch master";
+      pull = "git pull";
+      push = "git push";
+      pushf = "git push --force";
+      add = "git add .";
+      amend = "git commit --amend";
+      reset = "git reset --soft HEAD^";
+      rebasem = "git rebase -i main";
+      rebasemst = "git rebase -i master";
+      cc = "claude --dangerously-skip-permissions";
+      co = "codex --full-auto";
+    };
+    # Order 1050 puts this after the tool integrations Home Manager injects at
+    # order 1000 (starship, direnv, atuin) but before its shell aliases at 1100
+    # and zsh-syntax-highlighting at 1200. Both edges matter: HM's aliases must
+    # still win over any same-named alias in ic-workflow.zsh, and upstream
+    # requires syntax-highlighting to load after all custom widgets and
+    # keybindings are created.
+    #
+    # Before this file was split out of nix/user.nix, that slot was reached by
+    # accident -- the definition was also order 1000 and merely happened to
+    # sort last within the tie. Splitting the file reversed that tie-break, so
+    # the position is now pinned explicitly.
+    initContent = lib.mkOrder 1050 ''
+      bindkey '^f' autosuggest-accept
+
+      # IC workflow: exhaustive aliases, functions, and shell options.
+      # Kept in the repo so it can be edited without a full rebuild.
+      [ -f "${dotfilesDir}/files/zsh/ic-workflow.zsh" ] && source "${dotfilesDir}/files/zsh/ic-workflow.zsh"
+    '';
+  };
+}

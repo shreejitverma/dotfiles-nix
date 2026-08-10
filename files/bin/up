@@ -10,11 +10,32 @@ have() { command -v "$1" >/dev/null 2>&1; }
 # whatever checkout it was invoked from instead of a hardcoded path.
 FLAKE=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)
 
+# shellcheck source=../../setup/lib/platform.sh
+. "${FLAKE}/setup/lib/platform.sh"
+
+TARGET=$(ic_detect_target)
+PROFILE=$(ic_profile_for "$TARGET" "$(ic_detect_arch)")
+
 bold "==> nix flake update"
 nix flake update --flake "$FLAKE"
 
-bold "==> darwin-rebuild switch"
-/run/current-system/sw/bin/darwin-rebuild switch --flake "${FLAKE}#mac"
+# macOS activates a whole system generation through nix-darwin. Linux and WSL
+# have no equivalent for an existing distro, so they switch the standalone Home
+# Manager generation instead.
+case "$TARGET" in
+  darwin)
+    bold "==> darwin-rebuild switch"
+    /run/current-system/sw/bin/darwin-rebuild switch --flake "${FLAKE}#mac"
+    ;;
+  linux|wsl)
+    bold "==> home-manager switch ($PROFILE)"
+    home-manager switch --flake "${FLAKE}#${PROFILE}"
+    ;;
+  *)
+    echo "up: unsupported platform '$TARGET'" >&2
+    exit 1
+    ;;
+esac
 
 if have brew; then
   bold "==> brew update && upgrade && cleanup"

@@ -1,20 +1,26 @@
 # Bootstrap
 
-Run `setup/mac.sh` on a fresh Mac **after** cloning this repo and **after** replacing the placeholder values in the Nix files.
+Run `setup/install.sh` **after** cloning this repo and **after** replacing the placeholder values in the Nix files.
 
 Typical flow:
 
 1. Clone the repo
 2. Replace placeholder values such as:
    - `yourname`
-   - `/Users/yourname`
+   - `/Users/yourname` or `/home/yourname`
    - `Your Name`
    - `you@example.com`
 3. Run:
 
 ```bash
-bash setup/mac.sh
+bash setup/install.sh
 ```
+
+`install.sh` detects macOS, Linux, or WSL, shows what it found, and lets you confirm or override before installing.
+It then dispatches to `setup/mac.sh` or `setup/linux.sh`.
+Use `--target <darwin|linux|wsl>` to skip detection, `--yes` to skip the prompt, and `--dry-run` to print the plan without installing.
+
+On Windows, run `setup/windows.ps1` from PowerShell instead: Nix has no native Windows build, so that script sets up WSL2 and runs the Linux bootstrap inside it.
 
 What the script does:
 

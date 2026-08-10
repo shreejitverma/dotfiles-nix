@@ -14,7 +14,13 @@
 # warns are informational and do not affect the exit code.
 set -uo pipefail
 
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/run/current-system/sw/bin:/etc/profiles/per-user/$USER/bin:$HOME/go/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+# Platform differences (PATH, log location, scheduler) live in one place, shared
+# with the installer and sync-forks. Derived from this script's own location, so
+# ic-doctor reports on the checkout it was invoked from.
+# shellcheck source=../../setup/lib/platform.sh
+. "$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)/setup/lib/platform.sh"
+
+export PATH="$(ic_default_path)"
 
 GH_ROOT="$HOME/github"
 FORKS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi wheelhouse quota-axi"
@@ -98,12 +104,33 @@ for s in $SKILLS; do
 done
 
 echo "[5/7] weekly sync"
-if launchctl list 2>/dev/null | grep -q "sync-forks"; then
-  ok "launchd agent loaded (Sundays 10:00)"
-else
-  bad "launchd agent not loaded (run: rebuild)"
-fi
-LOG="$HOME/Library/Logs/sync-forks.log"
+# macOS schedules this with a launchd agent; Linux with a systemd user timer.
+# WSL deliberately ships the timer disabled, because systemd is off by default
+# there, so a missing timer is reported as a warning rather than a failure.
+case "$(ic_detect_target)" in
+  darwin)
+    if launchctl list 2>/dev/null | grep -q "sync-forks"; then
+      ok "launchd agent loaded (Sundays 10:00)"
+    else
+      bad "launchd agent not loaded (run: rebuild)"
+    fi
+    ;;
+  wsl)
+    if systemctl --user is-enabled sync-forks.timer >/dev/null 2>&1; then
+      ok "systemd user timer enabled (Sundays 10:00)"
+    else
+      warn "systemd timer not enabled (expected on WSL; run 'syncforks' by hand)"
+    fi
+    ;;
+  *)
+    if systemctl --user is-enabled sync-forks.timer >/dev/null 2>&1; then
+      ok "systemd user timer enabled (Sundays 10:00)"
+    else
+      bad "systemd user timer not enabled (run: rebuild)"
+    fi
+    ;;
+esac
+LOG="$(ic_log_dir)/sync-forks.log"
 if [ -f "$LOG" ]; then
   ok "last log: $(tail -1 "$LOG")"
 else

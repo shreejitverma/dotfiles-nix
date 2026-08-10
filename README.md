@@ -31,17 +31,22 @@ The goal is to provide a reusable foundation that you can make your own.
 
 ## Repo structure
 
+- `setup/install.sh` - detect the platform and run the right bootstrap (start here)
 - `setup/mac.sh` - bootstrap a fresh Mac
+- `setup/linux.sh` - bootstrap a Linux or WSL machine
+- `setup/windows.ps1` - enable WSL2 on Windows, then run the Linux bootstrap inside it
+- `setup/lib/platform.sh` - shared platform detection, sourced by the installer and `files/bin`
 - `setup/README.md` - bootstrap usage and testing notes
 - `flake.nix` - top-level Nix wiring
 - `nix/host.nix` - machine-level macOS config (nix-darwin)
-- `nix/user.nix` - user environment: packages, shell, git, fonts, dotfiles (Home Manager)
+- `nix/user.nix`, `nix/linux-user.nix`, `nix/wsl-user.nix` - per-platform Home Manager entry points
+- `nix/home/` - the layers those entry points compose: `common.nix` (cross-platform), `desktop.nix` (fonts and linked app configs), `darwin.nix`, `linux.nix`, `wsl.nix`
 - `files/.config/wezterm/wezterm.lua` - WezTerm config linked into place
 - `files/.config/herdr/config.toml` - herdr config linked into place
 - `files/bin/` - personal scripts kept on `PATH`, including `sync-forks` (weekly fork sync), `ic-link` (symlink farm), and `ic-doctor` (health check)
 - `files/skills/` - agent skills owned by this repo (currently `ship`)
 - `files/zsh/ic-workflow.zsh` - IC workflow shell config sourced by zsh
-- `tests/` - regression tests for the bootstrap script
+- `tests/` - regression tests for the bootstrap scripts and the Linux end-to-end install
 - `AGENTS.md` - repo-specific notes for coding agents (`CLAUDE.md` is a symlink to it)
 - `blog.md` - local copy of the [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web)
 
@@ -75,25 +80,57 @@ to:
 system = "x86_64-darwin";
 ```
 
-### 3. Run the bootstrap script on a fresh Mac
+### 3. Run the bootstrap
 
-This repo is primarily set up for Apple Silicon Macs. If you are on Intel, make the architecture change above before you run the bootstrap script.
+One command on every platform:
 
 ```bash
-bash setup/mac.sh
+bash setup/install.sh
 ```
 
-The script will:
+It detects whether the machine is macOS, Linux, or WSL, shows you what it found, and lets you confirm or pick a different target before anything is installed.
+Non-interactively (a pipe, CI) it uses the detected target without prompting rather than hanging.
 
-- install [Determinate Nix Installer](https://determinate.systems/nix-installer/) if needed
-- install [Homebrew](https://brew.sh/) if needed
-- apply the `nix-darwin` + Home Manager config
-- install [`nvm`](https://github.com/nvm-sh/nvm) and a default Node.js version if needed
+```bash
+bash setup/install.sh --dry-run          # print the plan, install nothing
+bash setup/install.sh --target wsl --yes # skip detection and the prompt
+```
 
-On a fresh machine, the bootstrap is designed to complete in one run.
-After the Determinate installer runs, the script sources the Nix daemon profile into the current shell and uses an absolute `nix` path for the first `nix-darwin` activation, so you should not need a second shell or a second setup run.
+#### What each platform gets
 
-The `NIX_DAEMON_PROFILE` and `DARWIN_REBUILD_BIN` environment variables are only there so the regression test can point the script at sandboxed paths.
+| Platform | Activated with | Owns |
+|---|---|---|
+| macOS | `nix-darwin` + Home Manager | the whole machine: macOS defaults, Homebrew casks, launchd agents |
+| Linux | standalone Home Manager | the user environment only |
+| WSL | standalone Home Manager | the user environment, minus the desktop layer |
+
+The asymmetry is not an oversight.
+`nix-darwin` has no equivalent for an existing Linux distro, so on Linux and WSL this repo manages your packages, shell, git, and prompt, and leaves the kernel, services, display server, and distro packages alone.
+
+#### Windows
+
+Nix has no native Windows build, so there is nothing to install on Windows proper.
+The supported path is WSL2:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup\windows.ps1
+```
+
+That enables WSL2, installs a distro if you have none, clones this repo **inside** the distro, and runs `setup/install.sh --target wsl` there.
+The clone has to live inside the distro rather than on `/mnt/c`: the config links files out of the checkout by absolute path, and a Windows-side checkout would leave those links resolving only while the drive is mounted, over a much slower filesystem boundary.
+`setup/linux.sh` refuses such a checkout outright rather than half-installing.
+
+If you already run WSL2, skip the PowerShell script and just run `bash setup/install.sh` inside your distro.
+
+#### What the platform scripts do
+
+- macOS (`setup/mac.sh`): installs [Determinate Nix](https://determinate.systems/nix-installer/) and [Homebrew](https://brew.sh/) if needed, applies `nix-darwin` + Home Manager, installs [`nvm`](https://github.com/nvm-sh/nvm) and a default Node.js.
+  On a fresh machine this completes in one run: after the installer, the script sources the Nix daemon profile into the current shell and uses an absolute `nix` path for the first activation, so no second shell or second run is needed.
+- Linux and WSL (`setup/linux.sh`): installs Determinate Nix if needed, builds the matching Home Manager profile out of this flake, and activates it.
+  It builds the activation package from the pinned `flake.lock` rather than running `nix run home-manager/master`, so the Home Manager doing the activation is the one this repo pins instead of whatever is current upstream.
+  Where systemd is not PID 1 (WSL without `systemd=true`, containers, non-systemd distros) it installs Nix with `--init none`, because the default Linux plan registers the daemon as a systemd service.
+
+The `NIX_DAEMON_PROFILE`, `DARWIN_REBUILD_BIN`, `WSL_OSRELEASE_FILE`, and `WSL_VERSION_FILE` environment variables exist only so the regression tests can point the scripts at sandboxed paths.
 Normal use should leave them unset.
 
 ## How I manage changes later
