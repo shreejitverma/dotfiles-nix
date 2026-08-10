@@ -39,6 +39,7 @@ Two things make it testable:
 The WSL probes read `$WSL_OSRELEASE_FILE` and `$WSL_VERSION_FILE`, which the test points at fixture files instead of the real `/proc`.
 Each WSL signal is asserted to be sufficient on its own: the `osrelease` probe, the `/proc/version` probe, and `$WSL_DISTRO_NAME`.
 Architecture assertions check the exact profile suffix, since the whole point of the `-aarch64` profiles is that an ARM machine must not rebuild for x86_64.
+An architecture the flake has no output for at all (a `riscv64` stub) must be named and refused before anything dispatches, rather than quietly mapped to the x86_64 profile and left to fail inside `nix build` on a host that by then has Nix on it.
 Native Windows is asserted to refuse and exit non-zero rather than dispatch anything.
 
 Standard input is `/dev/null` for every case, so a regression that prompts unconditionally surfaces as a wrong answer rather than a hung suite.
@@ -46,6 +47,11 @@ Standard input is `/dev/null` for every case, so a regression that prompts uncon
 It also covers `setup/linux.sh`'s checkout-path guard, for both the Linux and WSL entry modules, from a fixture placed at a deliberately wrong path.
 That guard is what stops a WSL install from running against a `/mnt/c` checkout, whose absolute links would resolve only while the Windows drive is mounted.
 `PATH` is masked down to coreutils for those cases, so that even if the guard ever regressed there is no `curl` and no `nix` for the rest of the script to reach an installer with.
+The same wrongly-placed fixture is then run with `PATH` masked down to just the three binaries the guard legitimately needs, so `sed` is genuinely absent.
+That is the regression case: the guard used to read the `dotfilesDir` literal by shelling out to `sed`, and a userland without it produced an empty answer and skipped the check entirely.
+
+The profile name is asserted to come from the `username` literal in `flake.nix` rather than from a constant in the shell, using a fixture whose flake declares a different user.
+`install.sh` must resolve `alice@linux` there, `linux.sh` must reject a stale `shreejitverma@linux` naming the username the flake actually declares, and it must do so before the installer is reached.
 
 It covers `setup/linux.sh`'s shell startup-file pre-flight the same way, from a fixture that does sit at the declared path so the checkout guard passes and this one is what stops the run.
 A symlinked `~/.bashrc` must abort with the path and the `mv` command named, before the build and before the installer; a regular `~/.profile` must only be announced with the `.backup` name it will get.

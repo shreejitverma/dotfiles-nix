@@ -5,9 +5,9 @@
 # The dotfilesDir literal below is parsed out of this file by setup/mac.sh,
 # files/bin/ic-link, and files/bin/ic-doctor to learn where the checkout must
 # live. Keep it on one line and in this shape, or those consumers silently stop
-# finding it. The assertion keeps it honest: the home modules derive the same
-# path independently from config.home.homeDirectory, and this fails the build if
-# the two ever drift apart.
+# finding it. The assertion keeps it honest: nix/home/dotfiles.nix holds the one
+# definition every layer derives its paths from, and this fails the build if the
+# literal here and that definition ever drift apart.
 
 let
   dotfilesDir = "${config.home.homeDirectory}/github/dotfiles-nix";
@@ -21,8 +21,8 @@ in
 
   assertions = [
     {
-      assertion = builtins.elem "${dotfilesDir}/files/bin" config.home.sessionPath;
-      message = "nix/user.nix dotfilesDir (${dotfilesDir}) disagrees with the path the home modules derived; the shell-side guards parse the literal in this file, so the two must match.";
+      assertion = dotfilesDir == config.ic.dotfilesDir;
+      message = "nix/user.nix dotfilesDir (${dotfilesDir}) disagrees with nix/home/dotfiles.nix (${config.ic.dotfilesDir}), which every layer derives its links, PATH entry, and agent from; the shell-side guards parse the literal in this file, so the two must match.";
     }
   ];
 }

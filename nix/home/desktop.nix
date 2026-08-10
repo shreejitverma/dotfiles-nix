@@ -6,9 +6,11 @@
 # of the WSL profile, which has no display server and no use for either.
 
 let
-  dotfilesDir = "${config.home.homeDirectory}/github/dotfiles-nix";
+  dotfilesDir = config.ic.dotfilesDir;
 in
 {
+  imports = [ ./dotfiles.nix ];
+
   home.packages = with pkgs; [
     nerd-fonts.hack
     roboto

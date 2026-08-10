@@ -183,6 +183,20 @@ assert_contains "$out" "Could not identify this platform" "an unrecognised kerne
 out=$(run_install "$DARWIN_ARM" "$EMPTY" "$EMPTY" --target bogus)
 assert_contains "$out" "Unknown target 'bogus'" "an invalid --target is rejected"
 
+# An architecture the flake has no output for used to fall through to the
+# x86_64 profile, so the run installed Nix and only then died inside `nix build`
+# with a system mismatch pointing nowhere near the cause.
+RISCV=$(make_uname_stub riscv Linux riscv64)
+out=$(run_install "$RISCV" "$PLAIN_PROC" "$EMPTY")
+assert_contains "$out" "Unsupported CPU architecture" "an unsupported architecture is rejected, not mapped to x86_64"
+assert_contains "$out" "riscv64" "the architecture error names the uname -m it saw"
+assert_contains "$out" "aarch64" "the architecture error names what is supported"
+assert_not_contains "$out" "command: bash" "nothing is dispatched on an unsupported architecture"
+
+status=$(run_install "$RISCV" "$PLAIN_PROC" "$EMPTY" >/dev/null 2>&1; echo $?)
+if [ "$status" -ne 0 ]; then pass "an unsupported architecture exits non-zero"
+else fail "an unsupported architecture exits non-zero -- got $status"; fi
+
 # --- dry-run really is inert -------------------------------------------------
 
 out=$(run_install "$LINUX_X86" "$PLAIN_PROC" "$EMPTY")
@@ -207,8 +221,8 @@ assert_contains "$out" "No --profile given" "linux.sh refuses to guess when give
 FIXTURE="$SANDBOX/wrong-place/dotfiles-nix"
 mkdir -p "$FIXTURE/nix/home" "$FIXTURE/setup/lib" "$SANDBOX/home"
 for f in nix/linux-user.nix nix/wsl-user.nix nix/user.nix nix/host.nix \
-         nix/home/common.nix nix/home/desktop.nix nix/home/darwin.nix \
-         nix/home/linux.nix nix/home/wsl.nix \
+         nix/home/dotfiles.nix nix/home/common.nix nix/home/desktop.nix \
+         nix/home/darwin.nix nix/home/linux.nix nix/home/wsl.nix \
          setup/linux.sh setup/install.sh setup/lib/platform.sh flake.nix; do
   guard_write_path "$FIXTURE/$f"
   cp "$REPO_ROOT/$f" "$FIXTURE/$f"
@@ -225,6 +239,32 @@ for profile in shreejitverma@linux shreejitverma@wsl; do
     || fail "linux.sh ($profile) exits non-zero at the wrong path -- got $status"
 done
 
+# --- and the guard survives a userland with no sed ---------------------------
+# The guard used to read the dotfilesDir literal by shelling out to sed. Where
+# sed is absent the answer came back empty and the check was skipped outright,
+# silently re-enabling exactly the misinstall it exists to prevent. PATH here is
+# masked down to the three binaries the guard path legitimately needs, so sed
+# (and awk, and everything else) is genuinely gone, and the guard must still
+# fire on the same wrongly-placed fixture.
+NOSED="$SANDBOX/stubs-nosed"
+mkdir -p "$NOSED"
+for b in dirname basename grep; do
+  guard_write_path "$NOSED/$b"
+  ln -sf "$(command -v "$b")" "$NOSED/$b"
+done
+if [ -e "$NOSED/sed" ]; then
+  fail "the sed-free PATH still has sed on it -- the test below would prove nothing"
+else
+  out=$(env -i HOME="$SANDBOX/home" PATH="$NOSED" \
+    "$REAL_BASH" "$FIXTURE/setup/linux.sh" --profile shreejitverma@linux </dev/null 2>&1)
+  status=$?
+  assert_contains "$out" "declares dotfilesDir=" "the checkout guard still fires with sed off PATH"
+  assert_not_contains "$out" "command not found" "the guard does not reach for a binary the userland lacks"
+  [ "$status" -ne 0 ] && pass "linux.sh exits non-zero at the wrong path with sed off PATH" \
+    || fail "linux.sh exits non-zero at the wrong path with sed off PATH -- got $status"
+fi
+
+
 # --- linux.sh refuses to activate over a startup file it cannot back up ------
 # Home Manager backs up a regular file it has to replace, but its collision
 # check skips the backup for a symlink, so a symlinked ~/.bashrc would abort
@@ -238,8 +278,8 @@ GOOD_HOME="$SANDBOX/home-symlink"
 GOOD_FIXTURE="$GOOD_HOME/github/dotfiles-nix"
 mkdir -p "$GOOD_FIXTURE/nix/home" "$GOOD_FIXTURE/setup/lib" "$SANDBOX/stubs-nocurl"
 for f in nix/linux-user.nix nix/wsl-user.nix nix/user.nix nix/host.nix \
-         nix/home/common.nix nix/home/desktop.nix nix/home/darwin.nix \
-         nix/home/linux.nix nix/home/wsl.nix \
+         nix/home/dotfiles.nix nix/home/common.nix nix/home/desktop.nix \
+         nix/home/darwin.nix nix/home/linux.nix nix/home/wsl.nix \
          setup/linux.sh setup/install.sh setup/lib/platform.sh flake.nix; do
   guard_write_path "$GOOD_FIXTURE/$f"
   cp "$REPO_ROOT/$f" "$GOOD_FIXTURE/$f"
@@ -276,6 +316,52 @@ assert_contains "$out" "kept as $GOOD_HOME/.profile.backup" \
   "linux.sh announces the regular startup file it will back up"
 assert_not_contains "$out" "Home Manager backs up a regular file" \
   "linux.sh does not block on a regular startup file"
+
+# --- the profile name is derived from flake.nix, not restated ----------------
+# A fork replaces `username` in flake.nix and nothing else, which is what
+# README step 2 tells it to do. The profile names have to follow, or the run
+# installs Nix and only then dies on a homeConfigurations attribute that does
+# not exist. This fixture's flake declares a different user, so every answer
+# below has to come from the file rather than from a constant in the shell.
+ALT_HOME="$SANDBOX/home-altuser"
+ALT_FIXTURE="$ALT_HOME/github/dotfiles-nix"
+mkdir -p "$ALT_FIXTURE/nix/home" "$ALT_FIXTURE/setup/lib"
+for f in nix/linux-user.nix nix/wsl-user.nix nix/user.nix nix/host.nix \
+         nix/home/dotfiles.nix nix/home/common.nix nix/home/desktop.nix \
+         nix/home/darwin.nix nix/home/linux.nix nix/home/wsl.nix \
+         setup/linux.sh setup/install.sh setup/lib/platform.sh flake.nix; do
+  guard_write_path "$ALT_FIXTURE/$f"
+  cp "$REPO_ROOT/$f" "$ALT_FIXTURE/$f"
+done
+guard_write_path "$ALT_FIXTURE/flake.nix"
+cat >"$ALT_FIXTURE/flake.nix" <<'EOF'
+{
+  outputs = { ... }:
+    let
+      username = "alice";
+    in
+    { inherit username; };
+}
+EOF
+
+out=$(env -i HOME="$ALT_HOME" PATH="$LINUX_X86:/usr/bin:/bin" \
+  WSL_OSRELEASE_FILE="$PLAIN_PROC" WSL_VERSION_FILE="$EMPTY" \
+  "$REAL_BASH" "$ALT_FIXTURE/setup/install.sh" --dry-run </dev/null 2>&1)
+assert_contains "$out" "profile: alice@linux" "install.sh derives the profile name from the flake's username literal"
+assert_not_contains "$out" "profile: shreejitverma@linux" "install.sh does not fall back to a restated username"
+
+out=$(env -i HOME="$ALT_HOME" PATH="$SANDBOX/stubs-nocurl:/usr/bin:/bin" \
+  "$REAL_BASH" "$ALT_FIXTURE/setup/linux.sh" --profile shreejitverma@linux </dev/null 2>&1)
+status=$?
+assert_contains "$out" 'flake.nix declares username = "alice"' \
+  "linux.sh rejects a profile the flake's username does not build, naming the real cause"
+assert_not_contains "$out" "STUB_CURL_CALLED" "linux.sh rejects the stale profile before installing Nix"
+[ "$status" -ne 0 ] && pass "linux.sh exits non-zero on a profile the flake does not define" \
+  || fail "linux.sh exits non-zero on a profile the flake does not define -- got $status"
+
+out=$(env -i HOME="$ALT_HOME" PATH="$SANDBOX/stubs-nocurl:/usr/bin:/bin" \
+  "$REAL_BASH" "$ALT_FIXTURE/setup/linux.sh" --profile alice@linux </dev/null 2>&1)
+assert_not_contains "$out" "Unknown profile" "linux.sh accepts the profile the flake's username does build"
 
 echo
 if [ "$FAILURES" -eq 0 ]; then

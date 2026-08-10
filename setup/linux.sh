@@ -19,6 +19,13 @@ set -euo pipefail
 
 DOTFILES_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && cd .. && pwd )
 
+# The flake-username and entry-module parsers are shared with setup/install.sh,
+# setup/mac.sh, files/bin/ic-link and files/bin/ic-doctor, so none of them can
+# drift in how it answers "which user, which checkout".
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/platform.sh
+. "$DOTFILES_DIR/setup/lib/platform.sh"
+
 # Overridable so the regression test can point these at a sandbox instead of the
 # real filesystem. Normal use should leave them unset.
 : "${NIX_DAEMON_PROFILE:=/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh}"
@@ -35,20 +42,12 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --profile) [ $# -ge 2 ] || die "--profile needs a value."; HM_PROFILE="$2"; shift 2 ;;
     --profile=*) HM_PROFILE="${1#*=}"; shift ;;
-    --help|-h) echo "Usage: bash setup/linux.sh --profile <shreejitverma@linux|shreejitverma@wsl|...>"; exit 0 ;;
+    --help|-h) echo "Usage: bash setup/linux.sh --profile <user>@<linux|linux-aarch64|wsl|wsl-aarch64>, where <user> is the username flake.nix declares."; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
 done
 
 [ -n "$HM_PROFILE" ] || die "No --profile given. Run setup/install.sh instead, which detects it for you."
-
-# Which entry module backs this profile. Both the placeholder check and the
-# checkout-path guard below read the module that will actually be activated.
-case "$HM_PROFILE" in
-  *@wsl|*@wsl-aarch64) ENTRY_MODULE="$DOTFILES_DIR/nix/wsl-user.nix"; IS_WSL=1 ;;
-  *@linux|*@linux-aarch64) ENTRY_MODULE="$DOTFILES_DIR/nix/linux-user.nix"; IS_WSL=0 ;;
-  *) die "Unknown profile '$HM_PROFILE'. Expected one of: shreejitverma@linux, shreejitverma@linux-aarch64, shreejitverma@wsl, shreejitverma@wsl-aarch64." ;;
-esac
 
 # Fail early if placeholder values have not been customized yet.
 if grep -R -n -E 'yourname|/Users/yourname|/home/yourname|Your Name|you@example.com' \
@@ -59,15 +58,34 @@ if grep -R -n -E 'yourname|/Users/yourname|/home/yourname|Your Name|you@example.
   exit 1
 fi
 
+# The profile has to name an attribute flake.nix actually defines, and those
+# names are built from the username literal there. Confirm it now, before Nix is
+# installed: a fork that replaced the username in flake.nix alone would
+# otherwise get all the way to `nix build` and fail on a missing attribute.
+FLAKE_USER=$(ic_flake_user "$DOTFILES_DIR") || die "Could not read the username literal from $DOTFILES_DIR/flake.nix, so the profile name cannot be confirmed. Restore its 'username = \"...\";' line, or set IC_FLAKE_USER to the name it declares."
+
+# Which entry module backs this profile. The checkout-path guard below reads the
+# module that will actually be activated.
+case "$HM_PROFILE" in
+  "$FLAKE_USER@wsl"|"$FLAKE_USER@wsl-aarch64") ENTRY_MODULE="$DOTFILES_DIR/nix/wsl-user.nix"; IS_WSL=1 ;;
+  "$FLAKE_USER@linux"|"$FLAKE_USER@linux-aarch64") ENTRY_MODULE="$DOTFILES_DIR/nix/linux-user.nix"; IS_WSL=0 ;;
+  *) die "Unknown profile '$HM_PROFILE'. flake.nix declares username = \"$FLAKE_USER\", so the profiles it defines are: $FLAKE_USER@linux, $FLAKE_USER@linux-aarch64, $FLAKE_USER@wsl, $FLAKE_USER@wsl-aarch64." ;;
+esac
+
 # Fail early if this checkout is not where the entry module says it is. Same
 # reasoning as the guard in setup/mac.sh: mkOutOfStoreSymlink does not require
 # its target to exist, so a checkout at any other path activates with a zero
 # exit status and silently leaves the files/bin PATH entry, the zsh workflow
 # layer, the linked app configs, and the sync-forks timer all dangling.
-# Tolerant of an entry module whose literal it cannot parse: an unreadable
-# literal skips the guard rather than blocking the bootstrap.
-declared_rel=$(sed -n 's/.*dotfilesDir = "${config\.home\.homeDirectory}\([^"]*\)".*/\1/p' \
-  "$ENTRY_MODULE" 2>/dev/null | head -1 || true)
+# Tolerant of an entry module that declares no literal in the expected shape:
+# that skips the guard rather than blocking the bootstrap. An entry module that
+# cannot be read at all is a different condition and is reported, so the guard
+# can never be disabled without a word about it.
+declared_status=0
+declared_rel=$(ic_declared_dotfiles_rel "$ENTRY_MODULE") || declared_status=$?
+if [ "$declared_status" -eq 2 ]; then
+  echo "warning: could not read $ENTRY_MODULE, so the checkout-path check is being skipped." >&2
+fi
 if [ -n "$declared_rel" ]; then
   declared_dir="$HOME$declared_rel"
   resolved_checkout=$(cd -P -- "$DOTFILES_DIR" && pwd)

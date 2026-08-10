@@ -23,8 +23,8 @@ in
 
   assertions = [
     {
-      assertion = builtins.elem "${dotfilesDir}/files/bin" config.home.sessionPath;
-      message = "nix/wsl-user.nix dotfilesDir (${dotfilesDir}) disagrees with the path the home modules derived; setup/linux.sh parses the literal in this file, so the two must match.";
+      assertion = dotfilesDir == config.ic.dotfilesDir;
+      message = "nix/wsl-user.nix dotfilesDir (${dotfilesDir}) disagrees with nix/home/dotfiles.nix (${config.ic.dotfilesDir}), which every layer derives its links, PATH entry, and timer from; setup/linux.sh parses the literal in this file, so the two must match.";
     }
   ];
 }

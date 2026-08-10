@@ -4,6 +4,12 @@ set -euo pipefail
 
 DOTFILES_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && cd .. && pwd )
 
+# The entry-module parser is shared with setup/linux.sh, files/bin/ic-link and
+# files/bin/ic-doctor, so the four cannot drift in how they read dotfilesDir.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/platform.sh
+. "$DOTFILES_DIR/setup/lib/platform.sh"
+
 # Fail early if placeholder values have not been customized yet
 if grep -R -n -E 'yourname|/Users/yourname|Your Name|you@example.com' \
   "$DOTFILES_DIR/flake.nix" \
@@ -19,10 +25,15 @@ fi
 # agent) is built from the dotfilesDir literal, and mkOutOfStoreSymlink does
 # not require its target to exist, so a checkout at any other path activates
 # with a zero exit status and leaves every one of those dangling. Checked here,
-# before anything mutates the machine. Tolerant of a nix/user.nix this can't
-# parse: an unreadable literal skips the guard rather than blocking bootstrap.
-declared_rel=$(sed -n 's/.*dotfilesDir = "${config\.home\.homeDirectory}\([^"]*\)".*/\1/p' \
-  "$DOTFILES_DIR/nix/user.nix" 2>/dev/null | head -1 || true)
+# before anything mutates the machine. Tolerant of a nix/user.nix that declares
+# no literal in the expected shape: that skips the guard rather than blocking
+# bootstrap. A nix/user.nix that cannot be read at all is a different condition
+# and is reported, so the guard can never be disabled without a word about it.
+declared_status=0
+declared_rel=$(ic_declared_dotfiles_rel "$DOTFILES_DIR/nix/user.nix") || declared_status=$?
+if [ "$declared_status" -eq 2 ]; then
+  echo "warning: could not read $DOTFILES_DIR/nix/user.nix, so the checkout-path check is being skipped." >&2
+fi
 if [ -n "$declared_rel" ]; then
   declared_dir="$HOME$declared_rel"
   resolved_checkout=$(cd -P -- "$DOTFILES_DIR" && pwd)

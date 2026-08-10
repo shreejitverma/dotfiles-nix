@@ -12,9 +12,11 @@
 # there and off by default.
 
 let
-  dotfilesDir = "${config.home.homeDirectory}/github/dotfiles-nix";
+  dotfilesDir = config.ic.dotfilesDir;
 in
 {
+  imports = [ ./dotfiles.nix ];
+
   home.homeDirectory = "/home/shreejitverma";
 
   # Installs the `home-manager` CLI into the profile. macOS does not need this
