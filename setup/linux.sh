@@ -247,7 +247,13 @@ fi
 # leaving it to wonder why the workflow functions are missing. Only ever print
 # the command: changing someone's login shell without being asked is not this
 # script's call.
-login_shell=$(getent passwd "$(id -un)" 2>/dev/null | sed -n 's/.*:\([^:]*\)$/\1/p' | head -1 || true)
+# getent rather than /etc/passwd: on a host using LDAP or SSSD the user has no
+# passwd file entry, and getent is the only thing that resolves them. The shell
+# is the last colon-separated field, extracted with a parameter expansion rather
+# than sed, so a lean userland without sed degrades to the $SHELL fallback below
+# instead of printing "sed: command not found" over an otherwise clean install.
+passwd_entry=$(getent passwd "$(id -un)" 2>/dev/null || true)
+login_shell="${passwd_entry##*:}"
 [ -n "$login_shell" ] || login_shell="${SHELL:-}"
 case "${login_shell##*/}" in
   zsh) ;;
