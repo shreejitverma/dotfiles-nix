@@ -6,7 +6,8 @@
 #   2. forks under ~/github (clone, upstream remote, branch, cleanliness)
 #   3. binaries on PATH with working --version
 #   4. agent skill symlinks (~/.agents/skills and ~/.claude/skills)
-#   5. the weekly sync-forks launchd agent and its last log line
+#   5. the weekly sync-forks schedule (launchd agent on macOS, systemd user
+#      timer on Linux) and its last log line
 #   6. auth (gh, quota-axi keychain access)
 #   7. cross-tool defaults (~/AGENTS.md chain, codex AGENTS.md and skills)
 #
@@ -17,10 +18,12 @@ set -uo pipefail
 # Platform differences (PATH, log location, scheduler) live in one place, shared
 # with the installer and sync-forks. Derived from this script's own location, so
 # ic-doctor reports on the checkout it was invoked from.
+# shellcheck source-path=SCRIPTDIR
 # shellcheck source=../../setup/lib/platform.sh
 . "$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)/setup/lib/platform.sh"
 
-export PATH="$(ic_default_path)"
+PATH="$(ic_default_path)"
+export PATH
 
 GH_ROOT="$HOME/github"
 FORKS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi wheelhouse quota-axi"

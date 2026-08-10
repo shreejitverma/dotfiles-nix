@@ -47,6 +47,10 @@ It also covers `setup/linux.sh`'s checkout-path guard, for both the Linux and WS
 That guard is what stops a WSL install from running against a `/mnt/c` checkout, whose absolute links would resolve only while the Windows drive is mounted.
 `PATH` is masked down to coreutils for those cases, so that even if the guard ever regressed there is no `curl` and no `nix` for the rest of the script to reach an installer with.
 
+It covers `setup/linux.sh`'s shell startup-file pre-flight the same way, from a fixture that does sit at the declared path so the checkout guard passes and this one is what stops the run.
+A symlinked `~/.bashrc` must abort with the path and the `mv` command named, before the build and before the installer; a regular `~/.profile` must only be announced with the `.backup` name it will get.
+`PATH` there leads with a stub `curl` that fails loudly, so reaching the Determinate installer surfaces as an assertion failure rather than as a real download.
+
 ## linux_e2e_docker.sh
 
 The dispatch test proves the installer decides correctly; this proves the decision works.

@@ -280,7 +280,7 @@ One skill is owned by this repo rather than a tool fork: `ship` (`files/skills/s
 
 **4. Weekly sync.**
 `files/bin/sync-forks` fetches upstream for every repo in its `REPOS` list, merges `upstream/main` into `main` (keeping local changes; conflicts abort and notify instead of clobbering), pushes the fork, and rebuilds the affected binaries.
-A launchd agent defined in `nix/user.nix` runs it every Sunday at 10:00, logging to `~/Library/Logs/sync-forks*.log`.
+A launchd agent defined in `nix/home/darwin.nix` runs it every Sunday at 10:00 on macOS; `nix/home/linux.nix` schedules the same run as a systemd user timer, and `nix/home/wsl.nix` ships that timer disabled.
 `syncforks` and `syncforks-dry` run it by hand.
 
 **5. Shell ergonomics.**
@@ -322,8 +322,9 @@ This is the full map; if something is installed and not listed here, it is unman
 | OS toolchain | Apple | Xcode Command Line Tools: `git` (pre-Nix), `make`, `clang` (`xcode-select --install`) |
 | Bootstrap | `setup/install.sh` -> `setup/mac.sh` | Determinate Nix, Homebrew, nvm + Node LTS (fallback; the primary Node is Homebrew's) |
 | System config | `nix/host.nix` | `starship`; brew formulas `autoconf`, `herdr`; casks `wezterm`, `amethyst`, `opensuperwhisper`; macOS defaults (incl. OpenSuperWhisper Cmd+` record hotkey) |
-| User packages | `nix/user.nix` `home.packages` | `git curl wget jq fd fastfetch ripgrep killall lazygit tree bun rustup zip unzip just dust duf procs sd btop tokei tealdeer uv ruff difftastic` + fonts (Hack Nerd Font, Roboto, Noto, Font Awesome) |
-| User programs | `nix/user.nix` `programs.*` | `git`+`delta`, `starship`, `bat`, `fzf`, `zoxide`, `atuin`, `direnv`, `zsh`, `eza` |
+| User packages | `nix/home/common.nix` `home.packages` | `git curl wget jq fd fastfetch ripgrep killall lazygit tree bun rustup zip unzip just dust duf procs sd btop tokei tealdeer uv ruff difftastic` |
+| User programs | `nix/home/common.nix` `programs.*` | `git`+`delta`, `starship`, `bat`, `fzf`, `zoxide`, `atuin`, `direnv`, `zsh`, `eza` |
+| Desktop layer | `nix/home/desktop.nix` | fonts (Hack Nerd Font, Roboto, Noto, Font Awesome) and the linked WezTerm and herdr configs |
 | Manual Homebrew | `brew` (not yet declared in nix) | formulas `node`, `go`, `gh`; casks `google-chrome` (required by chrome-devtools-axi), `codex` |
 | npm globals | `npm install -g` | `pnpm` (build tool for all Node forks) |
 | Native installers | vendor scripts | `claude` (Claude Code, `curl -fsSL https://claude.ai/install.sh \| bash`) |
@@ -502,7 +503,7 @@ The checklist when adopting the next tool, so it inherits all five layers:
   If the overlap ever conflicts, disable the system shortcut manually in System Settings > Keyboard > Keyboard Shortcuts > Keyboard.
   The hotkey preference is applied by `rebuild`; restart OpenSuperWhisper after changing it.
 - **`Ctrl-R` opens atuin's history search, not fzf's.**
-  That is deliberate: both `programs.fzf` and `programs.atuin` want `Ctrl-R`, and `nix/user.nix` cedes it to atuin with `programs.fzf.historyWidget.command = ""`.
+  That is deliberate: both `programs.fzf` and `programs.atuin` want `Ctrl-R`, and `nix/home/common.nix` cedes it to atuin with `programs.fzf.historyWidget.command = ""`.
   fzf keeps `Ctrl-T` (files) and `Alt-C` (directories).
   To flip the ownership, drop that line and add `"--disable-ctrl-r"` to `programs.atuin.flags`.
 - **The installer picked the wrong platform, or you want a different one.**
@@ -537,7 +538,8 @@ The checklist when adopting the next tool, so it inherits all five layers:
 - **sync-forks reported a conflict.**
   It aborted the merge and left the repo untouched; resolve by hand with `git merge upstream/main` in that clone, keeping your changes.
 - **Where are the sync logs?**
-  `~/Library/Logs/sync-forks.log` (script log) plus `sync-forks.out.log` and `sync-forks.err.log` (launchd streams).
+  On macOS, `~/Library/Logs/sync-forks.log` (script log) plus `sync-forks.out.log` and `sync-forks.err.log` (launchd streams).
+  On Linux and WSL there is no `~/Library`, so the script log follows the XDG state directory instead: `${XDG_STATE_HOME:-~/.local/state}/sync-forks.log`, with the run's own output in `journalctl --user -u sync-forks`.
 - **A skill or instruction symlink is missing or points somewhere stale.**
   Run `ic-link`; it recreates the entire farm idempotently.
 - **Everything else.**

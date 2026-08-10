@@ -15,11 +15,13 @@ set -uo pipefail
 # Platform differences (PATH, log location, notifications) live in one place,
 # shared with the installer and ic-doctor. Derived from this script's own
 # location so it resolves under launchd and systemd alike.
+# shellcheck source-path=SCRIPTDIR
 # shellcheck source=../../setup/lib/platform.sh
 . "$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)/setup/lib/platform.sh"
 
 # Tools must be found under launchd's and systemd's minimal environment.
-export PATH="$(ic_default_path)"
+PATH="$(ic_default_path)"
+export PATH
 
 GH_ROOT="$HOME/github"
 LOG="$(ic_log_dir)/sync-forks.log"

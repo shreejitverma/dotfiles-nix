@@ -5,7 +5,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 ## Deliberate decisions - do NOT silently revert them
 
 - `homebrew.onActivation.cleanup = "none"` in `nix/host.nix` is intentional. Packages installed manually with `brew` are left alone; do not harden it to `uninstall` or `zap` until the declared lists are the full source of truth for this machine.
-- App configs under `files/` are linked into place with `mkOutOfStoreSymlink` so they can be edited without a rebuild. Keep new app configs in `files/` and wire them through `home.file` in `nix/user.nix`; do not copy them into the Nix store.
+- App configs under `files/` are linked into place with `mkOutOfStoreSymlink` so they can be edited without a rebuild. Keep new app configs in `files/` and wire them through `home.file` in `nix/home/desktop.nix`; do not copy them into the Nix store.
 - `~/.config/nvim` is deliberately NOT managed by this repo. It is a separate git checkout of github.com/shreejitverma/kickstart.nvim; do not add a `home.file` symlink for it or copy an editor config into `files/`.
 - Never commit `.no-mistakes/` validation evidence to this public repo. `.no-mistakes/` is gitignored; if a validation pipeline stages evidence into a branch, drop it before merging.
 - `setup/mac.sh` generates `flake.lock` as the invoking user before the `sudo` activation, so the rebuild never leaves a root-owned lock file inside the repo. Keep that block ahead of the activation step.

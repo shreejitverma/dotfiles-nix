@@ -24,6 +24,7 @@ DOTFILES_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && cd .
 # Platform detection is shared with files/bin/up and files/bin/ic-doctor so the
 # installer, the update command, and the health check cannot disagree about what
 # this machine is.
+# shellcheck source-path=SCRIPTDIR
 # shellcheck source=lib/platform.sh
 . "$DOTFILES_DIR/setup/lib/platform.sh"
 
