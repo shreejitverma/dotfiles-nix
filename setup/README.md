@@ -33,7 +33,8 @@ What `setup/mac.sh` does:
 
 What `setup/linux.sh` does:
 
-- the same placeholder check, and the same checkout-path check against whichever entry module backs the profile it is activating (`nix/linux-user.nix` or `nix/wsl-user.nix`), which is also what refuses a WSL checkout on `/mnt/c`
+- the same placeholder check, then a check that the `--profile` it was given is one the `username` literal in `flake.nix` actually builds, so a fork that replaced that literal cannot get as far as a missing-attribute error from `nix build`
+- the same checkout-path check against whichever entry module backs the profile it is activating (`nix/linux-user.nix` or `nix/wsl-user.nix`), which is also what refuses a WSL checkout on `/mnt/c`
 - names the shell startup files Home Manager is about to take over, and stops before installing anything if one of them is a symlink Home Manager cannot back up
 - installs Determinate Nix if needed, asking for `--init none` wherever systemd is not PID 1
 - builds the Home Manager profile from this flake's pinned `flake.lock` and activates it, without `sudo`: nothing outside `$HOME` and the per-user Nix profile is touched
@@ -45,6 +46,9 @@ Both are designed to complete in a single run: right after installing Nix they s
 
 `NIX_DAEMON_PROFILE`, `DARWIN_REBUILD_BIN`, `WSL_OSRELEASE_FILE`, and `WSL_VERSION_FILE` are overridable only so the regression tests can point the scripts at sandboxed paths.
 For normal bootstrap usage, leave them unset.
+
+`IC_FLAKE_USER` is a separate escape hatch, also unset by default.
+The Home Manager profile names are read out of the `username` literal in `flake.nix`, so replacing that literal is all a fork has to do; set `IC_FLAKE_USER` only when `flake.nix` cannot be read at all, which is what the error messages that name it are telling you.
 
 ## Testing
 

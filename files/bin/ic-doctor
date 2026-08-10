@@ -55,9 +55,11 @@ if [ -z "$ENTRY_MODULE" ]; then
   bad "unsupported platform '$TARGET': no entry module to check the checkout against"
 else
   entry_name="nix/$(basename "$ENTRY_MODULE")"
-  declared_rel=$(sed -n 's/.*dotfilesDir = "${config\.home\.homeDirectory}\([^"]*\)".*/\1/p' \
-    "$ENTRY_MODULE" 2>/dev/null | head -1)
-  if [ -z "$declared_rel" ]; then
+  declared_status=0
+  declared_rel=$(ic_declared_dotfiles_rel "$ENTRY_MODULE") || declared_status=$?
+  if [ "$declared_status" -eq 2 ]; then
+    bad "could not read $ENTRY_MODULE at all"
+  elif [ -z "$declared_rel" ]; then
     bad "could not read dotfilesDir from $ENTRY_MODULE"
   else
     declared="$HOME$declared_rel"

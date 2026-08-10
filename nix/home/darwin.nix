@@ -8,9 +8,11 @@
 # and activate only the user environment; see linux.nix.
 
 let
-  dotfilesDir = "${config.home.homeDirectory}/github/dotfiles-nix";
+  dotfilesDir = config.ic.dotfilesDir;
 in
 {
+  imports = [ ./dotfiles.nix ];
+
   home.homeDirectory = "/Users/shreejitverma";
 
   programs.zsh.shellAliases.rebuild =

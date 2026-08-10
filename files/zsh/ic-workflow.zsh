@@ -21,9 +21,9 @@ IC_DOTFILES=${${(%):-%x}:A:h:h:h}
 # rather than probing the system again one alias at a time.
 #
 # macOS is settled from $OSTYPE without forking anything. Elsewhere this sources
-# setup/lib/platform.sh, the same source of truth setup/install.sh, files/bin/up
-# and files/bin/ic-doctor use, so the Home Manager profile an alias here builds
-# can never drift from the one those activate.
+# setup/lib/platform.sh, the same source of truth the bootstrap scripts and the
+# rest of files/bin use, so the Home Manager profile an alias here builds can
+# never drift from the one those activate.
 # -----------------------------------------------------------------------------
 IC_PLATFORM=unknown
 IC_HM_PROFILE=""
@@ -33,7 +33,11 @@ elif [ -r "$IC_DOTFILES/setup/lib/platform.sh" ]; then
   source "$IC_DOTFILES/setup/lib/platform.sh"
   IC_PLATFORM=$(ic_detect_target)
   case "$IC_PLATFORM" in
-    linux|wsl) IC_HM_PROFILE=$(ic_profile_for "$IC_PLATFORM" "$(ic_detect_arch)") ;;
+    # ic_profile_for refuses an architecture the flake has no output for and a
+    # flake.nix whose username literal it cannot read, leaving IC_HM_PROFILE
+    # empty. The `nbuild` alias below is then simply not defined, rather than
+    # defined to build something this machine cannot build.
+    linux|wsl) IC_HM_PROFILE=$(ic_profile_for "$IC_PLATFORM" "$(ic_detect_arch)" "$IC_DOTFILES") || IC_HM_PROFILE="" ;;
   esac
 fi
 

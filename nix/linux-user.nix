@@ -23,8 +23,12 @@ in
 
   assertions = [
     {
+      assertion = dotfilesDir == config.ic.dotfilesDir;
+      message = "nix/linux-user.nix dotfilesDir (${dotfilesDir}) disagrees with nix/home/dotfiles.nix (${config.ic.dotfilesDir}), which every layer derives its links, PATH entry, and timer from; setup/linux.sh parses the literal in this file, so the two must match.";
+    }
+    {
       assertion = builtins.elem "${dotfilesDir}/files/bin" config.home.sessionPath;
-      message = "nix/linux-user.nix dotfilesDir (${dotfilesDir}) disagrees with the path the home modules derived; setup/linux.sh parses the literal in this file, so the two must match.";
+      message = "home.sessionPath has no ${dotfilesDir}/files/bin entry, so this activation would leave every script in files/bin off PATH; nix/home/common.nix is where that entry is declared.";
     }
   ];
 }

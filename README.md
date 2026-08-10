@@ -39,12 +39,12 @@ The goal is to provide a reusable foundation that you can make your own.
 - `setup/mac.sh` - bootstrap a fresh Mac
 - `setup/linux.sh` - bootstrap a Linux or WSL machine
 - `setup/windows.ps1` - enable WSL2 on Windows, then run the Linux bootstrap inside it
-- `setup/lib/platform.sh` - shared platform detection, sourced by the installer and `files/bin`
+- `setup/lib/platform.sh` - shared platform detection and config-literal parsing, sourced by every bootstrap script and by `files/bin`
 - `setup/README.md` - bootstrap usage and testing notes
 - `flake.nix` - top-level Nix wiring
 - `nix/host.nix` - machine-level macOS config (nix-darwin)
 - `nix/user.nix`, `nix/linux-user.nix`, `nix/wsl-user.nix` - per-platform Home Manager entry points
-- `nix/home/` - the layers those entry points compose: `common.nix` (cross-platform), `desktop.nix` (fonts and linked app configs), `darwin.nix`, `linux.nix`, `wsl.nix`
+- `nix/home/` - the layers those entry points compose: `dotfiles.nix` (the one definition of where this checkout lives, read by all of the below), `common.nix` (cross-platform), `desktop.nix` (fonts and linked app configs), `darwin.nix`, `linux.nix`, `wsl.nix`
 - `files/.config/wezterm/wezterm.lua` - WezTerm config linked into place
 - `files/.config/herdr/config.toml` - herdr config linked into place
 - `files/bin/` - personal scripts kept on `PATH`, including `sync-forks` (weekly fork sync), `ic-link` (symlink farm), and `ic-doctor` (health check)
@@ -68,9 +68,12 @@ cd ~/github/dotfiles-nix
 Update values like:
 
 - `yourname`
-- `/Users/yourname`
+- `/Users/yourname` (macOS, in `nix/home/darwin.nix`) or `/home/yourname` (Linux and WSL, in `nix/home/linux.nix`)
 - `Your Name`
 - `you@example.com`
+
+`yourname` also appears as the `username` literal in `flake.nix`, which is what names the `homeConfigurations` outputs.
+The bootstrap reads that literal to derive the profile it activates, so replacing it there is enough; nothing else restates it.
 
 If you are on an Intel Mac, change the system target in `flake.nix` from:
 

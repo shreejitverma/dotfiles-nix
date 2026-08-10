@@ -4,14 +4,15 @@
 # Linux, and WSL. Anything that depends on the platform lives in darwin.nix,
 # linux.nix, wsl.nix, or desktop.nix and is composed on top of this.
 #
-# dotfilesDir is derived from home.homeDirectory rather than hardcoded, so the
-# same expression resolves to /Users/<user>/... on macOS and /home/<user>/...
-# on Linux and WSL.
+# dotfilesDir comes from ./dotfiles.nix, the single definition every layer
+# shares, so no two layers can disagree about where the checkout is.
 
 let
-  dotfilesDir = "${config.home.homeDirectory}/github/dotfiles-nix";
+  dotfilesDir = config.ic.dotfilesDir;
 in
 {
+  imports = [ ./dotfiles.nix ];
+
   home.username = "shreejitverma";
   home.stateVersion = "23.11";
   home.language.base = "en_US.UTF-8";

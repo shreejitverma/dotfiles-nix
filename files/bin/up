@@ -35,14 +35,20 @@ nix flake update --flake "$FLAKE"
 # have no equivalent for an existing distro, so they switch the standalone Home
 # Manager generation instead. The target is already validated above, so this
 # case needs no default arm; ic_profile_for is called only where its answer is
-# used, since it fails for anything else and would abort under `set -e`.
+# used. It still refuses an architecture the flake has no output for and a
+# flake.nix whose username literal it cannot read, so report either rather than
+# letting `set -e` abort with nothing said.
 case "$TARGET" in
   darwin)
     bold "==> darwin-rebuild switch"
     /run/current-system/sw/bin/darwin-rebuild switch --flake "${FLAKE}#mac"
     ;;
   linux|wsl)
-    PROFILE=$(ic_profile_for "$TARGET" "$(ic_detect_arch)")
+    if ! PROFILE=$(ic_profile_for "$TARGET" "$(ic_detect_arch)" "$FLAKE"); then
+      echo "up: no Home Manager profile for $TARGET on '$(uname -m 2>/dev/null || echo ?)'." >&2
+      echo "up: this flake builds for x86_64 (amd64) and aarch64 (arm64), and derives the profile name from the 'username = \"...\";' literal in ${FLAKE}/flake.nix." >&2
+      exit 1
+    fi
     bold "==> home-manager switch ($PROFILE)"
     home-manager switch --flake "${FLAKE}#${PROFILE}"
     ;;

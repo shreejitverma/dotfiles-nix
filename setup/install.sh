@@ -91,6 +91,15 @@ if [ -z "$TARGET" ] && [ "$DETECTED" = unknown ]; then
   die "Could not identify this platform (uname -s = '$(uname -s 2>/dev/null || echo ?)'). Re-run with --target darwin|linux|wsl."
 fi
 
+# The flake has outputs for two architectures only, and the per-architecture
+# Linux and WSL profiles exist precisely so a machine never builds for the wrong
+# CPU. Refuse an architecture that maps to neither here, before anything is
+# installed, rather than letting it fall through to a system mismatch inside
+# `nix build` on a host that by then already has Nix on it.
+if [ "$ARCH" = unknown ]; then
+  die "Unsupported CPU architecture (uname -m = '$(uname -m 2>/dev/null || echo ?)'). This flake builds for x86_64 (amd64) and aarch64 (arm64) only."
+fi
+
 # Interactive confirmation. Only when the user gave no explicit target, did not
 # pass --yes, and stdin is a terminal that can actually answer.
 if [ -z "$TARGET" ] && [ "$ASSUME_YES" -eq 0 ] && [ "$DRY_RUN" -eq 0 ] && [ -t 0 ]; then
@@ -120,7 +129,12 @@ if [ "$TARGET" = darwin ] && [ "$ARCH" = x86_64 ]; then
   echo "On an Intel Mac, change that to x86_64-darwin before continuing." >&2
 fi
 
-PROFILE=$(ic_profile_for "$TARGET" "$ARCH")
+# The Linux and WSL profile names are derived from the username literal in
+# flake.nix rather than restated, so a fork that replaces it there cannot be
+# handed a name the flake does not define. Failing here keeps that loud and
+# early, instead of opaque and after Nix has been installed.
+PROFILE=$(ic_profile_for "$TARGET" "$ARCH" "$DOTFILES_DIR") \
+  || die "Could not derive the flake output for target '$TARGET' on $ARCH. Check that $DOTFILES_DIR/flake.nix still declares 'username = \"...\";', or set IC_FLAKE_USER to the name it uses."
 
 case "$TARGET" in
   darwin) CMD=(bash "$DOTFILES_DIR/setup/mac.sh") ;;
