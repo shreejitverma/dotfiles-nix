@@ -21,9 +21,9 @@ IC_DOTFILES=${${(%):-%x}:A:h:h:h}
 # rather than probing the system again one alias at a time.
 #
 # macOS is settled from $OSTYPE without forking anything. Elsewhere this sources
-# setup/lib/platform.sh, the same source of truth setup/install.sh, files/bin/up
-# and files/bin/ic-doctor use, so the Home Manager profile an alias here builds
-# can never drift from the one those activate.
+# setup/lib/platform.sh, the same source of truth the bootstrap scripts and the
+# rest of files/bin use, so the Home Manager profile an alias here builds can
+# never drift from the one those activate.
 # -----------------------------------------------------------------------------
 IC_PLATFORM=unknown
 IC_HM_PROFILE=""

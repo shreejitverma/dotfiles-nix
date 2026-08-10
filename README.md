@@ -39,7 +39,7 @@ The goal is to provide a reusable foundation that you can make your own.
 - `setup/mac.sh` - bootstrap a fresh Mac
 - `setup/linux.sh` - bootstrap a Linux or WSL machine
 - `setup/windows.ps1` - enable WSL2 on Windows, then run the Linux bootstrap inside it
-- `setup/lib/platform.sh` - shared platform detection, sourced by the installer and `files/bin`
+- `setup/lib/platform.sh` - shared platform detection and config-literal parsing, sourced by every bootstrap script and by `files/bin`
 - `setup/README.md` - bootstrap usage and testing notes
 - `flake.nix` - top-level Nix wiring
 - `nix/host.nix` - machine-level macOS config (nix-darwin)

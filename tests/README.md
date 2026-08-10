@@ -46,16 +46,19 @@ Standard input is `/dev/null` for every case, so a regression that prompts uncon
 
 It also covers `setup/linux.sh`'s checkout-path guard, for both the Linux and WSL entry modules, from a fixture placed at a deliberately wrong path.
 That guard is what stops a WSL install from running against a `/mnt/c` checkout, whose absolute links would resolve only while the Windows drive is mounted.
-`PATH` is masked down to coreutils for those cases, so that even if the guard ever regressed there is no `curl` and no `nix` for the rest of the script to reach an installer with.
-The same wrongly-placed fixture is then run with `PATH` masked down to just the three binaries the guard legitimately needs, so `sed` is genuinely absent.
+`PATH` for those cases leads with stub `curl` and `nix` executables that announce themselves on stderr and fail, so that even if the guard ever regressed the rest of the script has no way to reach a real installer or a real build.
+Masking down to `/usr/bin:/bin` would not be enough on its own: a stock macOS or Linux host has a real `curl` sitting there.
+The same wrongly-placed fixture is then run with `PATH` masked down to just the three binaries the guard legitimately needs, so `sed` is genuinely absent (and so are `curl` and `nix`).
 That is the regression case: the guard used to read the `dotfilesDir` literal by shelling out to `sed`, and a userland without it produced an empty answer and skipped the check entirely.
 
 The profile name is asserted to come from the `username` literal in `flake.nix` rather than from a constant in the shell, using a fixture whose flake declares a different user.
 `install.sh` must resolve `alice@linux` there, `linux.sh` must reject a stale `shreejitverma@linux` naming the username the flake actually declares, and it must do so before the installer is reached.
+The matching accept case, `alice@linux`, is the only case in this suite that clears every guard, so it is asserted to stop at the stub `nix` on its first real invocation, before any build or activation.
+That is why the stub `nix` matters rather than leaving the stub `curl` to stop the run by accident: with a real `nix` anywhere on `PATH` the installer branch is skipped and the next step is a genuine build against the fixture.
 
 It covers `setup/linux.sh`'s shell startup-file pre-flight the same way, from a fixture that does sit at the declared path so the checkout guard passes and this one is what stops the run.
 A symlinked `~/.bashrc` must abort with the path and the `mv` command named, before the build and before the installer; a regular `~/.profile` must only be announced with the `.backup` name it will get.
-`PATH` there leads with a stub `curl` that fails loudly, so reaching the Determinate installer surfaces as an assertion failure rather than as a real download.
+`PATH` there leads with the same stub `curl` and `nix`, so reaching the Determinate installer or a build surfaces as an assertion failure rather than as a real download.
 
 ## linux_e2e_docker.sh
 

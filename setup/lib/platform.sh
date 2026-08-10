@@ -2,10 +2,11 @@
 #
 # platform.sh: shared platform detection, sourced rather than executed.
 #
-# The single source of truth for "what kind of machine is this and which flake
-# output installs it". setup/install.sh, files/bin/up, and files/bin/ic-doctor
-# all source this, so the answer cannot drift between the installer, the update
-# command, and the health check.
+# The single source of truth for "what kind of machine is this, which user does
+# the flake declare, where does the checkout have to live, and which flake output
+# installs it". Every bootstrap script and every script in files/bin sources
+# this, so the answer cannot drift between the installer, the platform
+# bootstraps, the update command, and the health check. AGENTS.md lists them.
 #
 # Every function is prefixed ic_ because callers source this into their own
 # namespace.
