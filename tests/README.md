@@ -43,6 +43,10 @@ Native Windows is asserted to refuse and exit non-zero rather than dispatch anyt
 
 Standard input is `/dev/null` for every case, so a regression that prompts unconditionally surfaces as a wrong answer rather than a hung suite.
 
+It also covers `setup/linux.sh`'s checkout-path guard, for both the Linux and WSL entry modules, from a fixture placed at a deliberately wrong path.
+That guard is what stops a WSL install from running against a `/mnt/c` checkout, whose absolute links would resolve only while the Windows drive is mounted.
+`PATH` is masked down to coreutils for those cases, so that even if the guard ever regressed there is no `curl` and no `nix` for the rest of the script to reach an installer with.
+
 ## linux_e2e_docker.sh
 
 The dispatch test proves the installer decides correctly; this proves the decision works.

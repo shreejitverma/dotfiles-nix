@@ -136,6 +136,11 @@ out=$(env -i HOME="$SANDBOX/home" PATH="$LINUX_X86:/usr/bin:/bin" \
   "$REAL_BASH" "$REPO_ROOT/setup/install.sh" --dry-run </dev/null 2>&1)
 assert_contains "$out" "target:  wsl" "WSL is detected from \$WSL_DISTRO_NAME with both /proc probes clean"
 
+out=$(env -i HOME="$SANDBOX/home" PATH="$LINUX_X86:/usr/bin:/bin" \
+  WSL_INTEROP=/run/WSL/8_interop WSL_OSRELEASE_FILE="$EMPTY" WSL_VERSION_FILE="$EMPTY" \
+  "$REAL_BASH" "$REPO_ROOT/setup/install.sh" --dry-run </dev/null 2>&1)
+assert_contains "$out" "target:  wsl" "WSL is detected from \$WSL_INTEROP with both /proc probes clean"
+
 # --- architecture ------------------------------------------------------------
 # The aarch64 profiles exist precisely so an ARM machine does not rebuild for
 # x86_64, so this asserts the suffix rather than just "some linux profile".
@@ -192,6 +197,33 @@ assert_contains "$out" "Unknown profile 'nonsense'" "linux.sh rejects an unknown
 out=$(env -i HOME="$SANDBOX/home" PATH="/usr/bin:/bin" \
   "$REAL_BASH" "$REPO_ROOT/setup/linux.sh" </dev/null 2>&1)
 assert_contains "$out" "No --profile given" "linux.sh refuses to guess when given no profile"
+
+# --- linux.sh refuses a checkout that is not where its entry module says ------
+# This is what stops a WSL install from running against a /mnt/c checkout, whose
+# absolute links would resolve only while the Windows drive is mounted. The
+# fixture sits at a deliberately wrong path, so the guard must fire; PATH is
+# masked down to coreutils so that even if the guard ever regressed, there is no
+# curl and no nix for the rest of the script to reach an installer with.
+FIXTURE="$SANDBOX/wrong-place/dotfiles-nix"
+mkdir -p "$FIXTURE/nix/home" "$FIXTURE/setup/lib" "$SANDBOX/home"
+for f in nix/linux-user.nix nix/wsl-user.nix nix/user.nix nix/host.nix \
+         nix/home/common.nix nix/home/desktop.nix nix/home/darwin.nix \
+         nix/home/linux.nix nix/home/wsl.nix \
+         setup/linux.sh setup/install.sh setup/lib/platform.sh flake.nix; do
+  guard_write_path "$FIXTURE/$f"
+  cp "$REPO_ROOT/$f" "$FIXTURE/$f"
+done
+
+for profile in shreejitverma@linux shreejitverma@wsl; do
+  out=$(env -i HOME="$SANDBOX/home" PATH="/usr/bin:/bin" \
+    "$REAL_BASH" "$FIXTURE/setup/linux.sh" --profile "$profile" </dev/null 2>&1)
+  status=$?
+  assert_contains "$out" "declares dotfilesDir=" "linux.sh ($profile) refuses a checkout at the wrong path"
+  assert_contains "$out" "$SANDBOX/home/github/dotfiles-nix" "linux.sh ($profile) names the declared path"
+  assert_not_contains "$out" "building" "linux.sh ($profile) never reaches the build step"
+  [ "$status" -ne 0 ] && pass "linux.sh ($profile) exits non-zero at the wrong path" \
+    || fail "linux.sh ($profile) exits non-zero at the wrong path -- got $status"
+done
 
 echo
 if [ "$FAILURES" -eq 0 ]; then
