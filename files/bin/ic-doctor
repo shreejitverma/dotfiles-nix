@@ -2,11 +2,12 @@
 # ic-doctor: one-shot health check for the agent-first IC toolchain.
 #
 # Verifies the integration layers documented in the README:
-#   1. this repo's checkout path vs the dotfilesDir nix/user.nix declares
+#   1. this repo's checkout path vs the dotfilesDir this platform's entry module declares
 #   2. forks under ~/github (clone, upstream remote, branch, cleanliness)
 #   3. binaries on PATH with working --version
 #   4. agent skill symlinks (~/.agents/skills and ~/.claude/skills)
-#   5. the weekly sync-forks launchd agent and its last log line
+#   5. the weekly sync-forks schedule (launchd agent on macOS, systemd user
+#      timer on Linux) and its last log line
 #   6. auth (gh, quota-axi keychain access)
 #   7. cross-tool defaults (~/AGENTS.md chain, codex AGENTS.md and skills)
 #
@@ -14,7 +15,15 @@
 # warns are informational and do not affect the exit code.
 set -uo pipefail
 
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/run/current-system/sw/bin:/etc/profiles/per-user/$USER/bin:$HOME/go/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+# Platform differences (PATH, log location, scheduler) live in one place, shared
+# with the installer and sync-forks. Derived from this script's own location, so
+# ic-doctor reports on the checkout it was invoked from.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../../setup/lib/platform.sh
+. "$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)/setup/lib/platform.sh"
+
+PATH="$(ic_default_path)"
+export PATH
 
 GH_ROOT="$HOME/github"
 FORKS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi wheelhouse quota-axi"
@@ -27,30 +36,52 @@ warn() { printf '  warn  %s\n' "$*"; }
 bad()  { printf '  FAIL  %s\n' "$*"; fail=1; }
 
 # Everything this repo wires into the machine (PATH, the zsh workflow layer,
-# the out-of-store app config symlinks, the sync-forks launchd agent) is built
-# from the dotfilesDir literal in nix/user.nix. If the checkout is not actually
-# at that path, all of it dangles silently, so check it before anything else.
+# the out-of-store app config symlinks, the sync-forks scheduler entry) is built
+# from the dotfilesDir literal in the entry module. If the checkout is not
+# actually at that path, all of it dangles silently, so check it first.
 echo "[1/7] dotfiles checkout"
 SELF_REPO=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)
-declared_rel=$(sed -n 's/.*dotfilesDir = "${config\.home\.homeDirectory}\([^"]*\)".*/\1/p' \
-  "$SELF_REPO/nix/user.nix" | head -1)
-if [ -z "$declared_rel" ]; then
-  bad "could not read dotfilesDir from $SELF_REPO/nix/user.nix"
+TARGET=$(ic_detect_target)
+# Each platform activates its own entry module, and each declares its own
+# dotfilesDir literal. Read the one that is actually in force here, the way
+# setup/linux.sh reads the module backing the profile it is about to activate.
+case "$TARGET" in
+  darwin) ENTRY_MODULE="$SELF_REPO/nix/user.nix" ;;
+  linux)  ENTRY_MODULE="$SELF_REPO/nix/linux-user.nix" ;;
+  wsl)    ENTRY_MODULE="$SELF_REPO/nix/wsl-user.nix" ;;
+  *)      ENTRY_MODULE="" ;;
+esac
+if [ -z "$ENTRY_MODULE" ]; then
+  bad "unsupported platform '$TARGET': no entry module to check the checkout against"
 else
-  declared="$HOME$declared_rel"
-  if [ ! -d "$declared" ]; then
-    bad "nix/user.nix declares dotfilesDir=$declared, which does not exist (checkout is $SELF_REPO)"
-  elif [ "$(cd -P "$declared" && pwd)" != "$SELF_REPO" ]; then
-    bad "dotfilesDir=$declared does not match this checkout $SELF_REPO (rebuild would link the wrong tree)"
+  entry_name="nix/$(basename "$ENTRY_MODULE")"
+  declared_rel=$(sed -n 's/.*dotfilesDir = "${config\.home\.homeDirectory}\([^"]*\)".*/\1/p' \
+    "$ENTRY_MODULE" 2>/dev/null | head -1)
+  if [ -z "$declared_rel" ]; then
+    bad "could not read dotfilesDir from $ENTRY_MODULE"
   else
-    ok "dotfilesDir matches this checkout ($SELF_REPO)"
+    declared="$HOME$declared_rel"
+    if [ ! -d "$declared" ]; then
+      bad "$entry_name declares dotfilesDir=$declared, which does not exist (checkout is $SELF_REPO)"
+    elif [ "$(cd -P "$declared" && pwd)" != "$SELF_REPO" ]; then
+      bad "dotfilesDir=$declared does not match this checkout $SELF_REPO (rebuild would link the wrong tree)"
+    else
+      ok "dotfilesDir matches this checkout ($SELF_REPO)"
+    fi
   fi
 fi
 # The rebuild links these through mkOutOfStoreSymlink, so a wrong dotfilesDir
 # leaves them present but dangling; -e follows the chain and catches that.
-for f in .config/wezterm/wezterm.lua .config/herdr/config.toml; do
-  if [ -e "$HOME/$f" ]; then ok "~/$f resolves"; else bad "~/$f dangling or missing (run: rebuild)"; fi
-done
+# WSL does not compose nix/home/desktop.nix, which is where those links are
+# declared, because a WSL distro has no display server. Their absence there is
+# the intended outcome, not a fault.
+if [ "$TARGET" = wsl ]; then
+  ok "desktop app configs not linked (no desktop layer on WSL)"
+else
+  for f in .config/wezterm/wezterm.lua .config/herdr/config.toml; do
+    if [ -e "$HOME/$f" ]; then ok "~/$f resolves"; else bad "~/$f dangling or missing (run: rebuild)"; fi
+  done
+fi
 if [ -f "$SELF_REPO/files/zsh/ic-workflow.zsh" ] && \
    grep -qF "$SELF_REPO/files/zsh/ic-workflow.zsh" "$HOME/.zshrc" 2>/dev/null; then
   ok "zsh sources the IC workflow layer"
@@ -98,12 +129,33 @@ for s in $SKILLS; do
 done
 
 echo "[5/7] weekly sync"
-if launchctl list 2>/dev/null | grep -q "sync-forks"; then
-  ok "launchd agent loaded (Sundays 10:00)"
-else
-  bad "launchd agent not loaded (run: rebuild)"
-fi
-LOG="$HOME/Library/Logs/sync-forks.log"
+# macOS schedules this with a launchd agent; Linux with a systemd user timer.
+# WSL deliberately ships the timer disabled, because systemd is off by default
+# there, so a missing timer is reported as a warning rather than a failure.
+case "$TARGET" in
+  darwin)
+    if launchctl list 2>/dev/null | grep -q "sync-forks"; then
+      ok "launchd agent loaded (Sundays 10:00)"
+    else
+      bad "launchd agent not loaded (run: rebuild)"
+    fi
+    ;;
+  wsl)
+    if systemctl --user is-enabled sync-forks.timer >/dev/null 2>&1; then
+      ok "systemd user timer enabled (Sundays 10:00)"
+    else
+      warn "systemd timer not enabled (expected on WSL; run 'syncforks' by hand)"
+    fi
+    ;;
+  *)
+    if systemctl --user is-enabled sync-forks.timer >/dev/null 2>&1; then
+      ok "systemd user timer enabled (Sundays 10:00)"
+    else
+      bad "systemd user timer not enabled (run: rebuild)"
+    fi
+    ;;
+esac
+LOG="$(ic_log_dir)/sync-forks.log"
 if [ -f "$LOG" ]; then
   ok "last log: $(tail -1 "$LOG")"
 else

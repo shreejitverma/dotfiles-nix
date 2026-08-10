@@ -5,12 +5,26 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 ## Deliberate decisions - do NOT silently revert them
 
 - `homebrew.onActivation.cleanup = "none"` in `nix/host.nix` is intentional. Packages installed manually with `brew` are left alone; do not harden it to `uninstall` or `zap` until the declared lists are the full source of truth for this machine.
-- App configs under `files/` are linked into place with `mkOutOfStoreSymlink` so they can be edited without a rebuild. Keep new app configs in `files/` and wire them through `home.file` in `nix/user.nix`; do not copy them into the Nix store.
+- App configs under `files/` are linked into place with `mkOutOfStoreSymlink` so they can be edited without a rebuild. Keep new app configs in `files/` and wire them through `home.file` in `nix/home/desktop.nix`; do not copy them into the Nix store.
 - `~/.config/nvim` is deliberately NOT managed by this repo. It is a separate git checkout of github.com/shreejitverma/kickstart.nvim; do not add a `home.file` symlink for it or copy an editor config into `files/`.
 - Never commit `.no-mistakes/` validation evidence to this public repo. `.no-mistakes/` is gitignored; if a validation pipeline stages evidence into a branch, drop it before merging.
 - `setup/mac.sh` generates `flake.lock` as the invoking user before the `sudo` activation, so the rebuild never leaves a root-owned lock file inside the repo. Keep that block ahead of the activation step.
-- `files/bin/ic-link` builds its links from the `dotfilesDir` literal in `nix/user.nix`, deliberately not from `${BASH_SOURCE[0]}`. It writes durable symlinks into `$HOME` that are read long after it exits, so a source path derived from the invoking tree would point them at a git worktree that gets deleted on cleanup. `files/bin/up` and `files/bin/ic-doctor` are correctly `BASH_SOURCE`-derived and must stay that way: `up` rebuilds the checkout it is in and `ic-doctor` reports on the checkout it is in.
+- `files/bin/ic-link` builds its links from the `dotfilesDir` literal in the entry module for the platform it is running on, deliberately not from `${BASH_SOURCE[0]}`. It writes durable symlinks into `$HOME` that are read long after it exits, so a source path derived from the invoking tree would point them at a git worktree that gets deleted on cleanup. `files/bin/up` and `files/bin/ic-doctor` are correctly `BASH_SOURCE`-derived and must stay that way: `up` rebuilds the checkout it is in and `ic-doctor` reports on the checkout it is in.
 - `setup/mac.sh` fails fast when the checkout path does not match the `dotfilesDir` literal in `nix/user.nix`. `mkOutOfStoreSymlink` does not require its target to exist, so without this guard a clone at any other path activates with a zero exit status and silently leaves the app config symlinks, the `files/bin` PATH entry, the zsh workflow layer, and the `sync-forks` agent all dangling. Keep the guard ahead of the Nix install, and keep it tolerant of a `nix/user.nix` whose literal it cannot parse.
+
+- `nix/home/common.nix` sets `programs.zsh.initContent` with `lib.mkOrder 1050`, and the number is load-bearing. Home Manager injects the starship, direnv, and atuin integrations at order 1000, its own shell aliases at 1100, and zsh-syntax-highlighting at 1200. 1050 is the only slot that keeps `ic-workflow.zsh` sourced after the tool integrations, before HM's aliases (so a same-named HM alias still wins), and before syntax-highlighting (which upstream requires to load after all custom widgets and keybindings). Before the file was split out of `nix/user.nix` this position was reached by accident, as a tie-break among order-1000 definitions; splitting the file reversed that tie and silently moved the block. Do not change the number, and do not switch it to a bare `mkAfter`.
+- Each platform entry module (`nix/user.nix`, `nix/linux-user.nix`, `nix/wsl-user.nix`) declares its own one-line `dotfilesDir` literal, and each carries an assertion that the literal agrees with the path the home modules derived. The literal is not decorative: `setup/mac.sh`, `setup/linux.sh`, `files/bin/ic-link`, and `files/bin/ic-doctor` parse it with `sed`/`grep`. Keep it on one line in the existing shape, or those consumers silently stop finding it and their guards degrade to no-ops.
+- `programs.bash.enable` belongs in `nix/home/linux.nix`, never in `nix/home/common.nix`. Linux and WSL log in with bash, so without it the session PATH, environment, and aliases exist only in the generated `.zshrc`. `common.nix` is shared with macOS, which already logs in with zsh, and enabling bash there would generate a `.bashrc`/`.profile` that nothing on that machine reads. The bash alias set is `config.programs.zsh.shellAliases` rather than a second copy, so the two cannot drift and the platform-specific `rebuild` alias is inherited; `files/zsh/ic-workflow.zsh` is zsh-only and is deliberately not sourced from bash.
+- `setup/lib/platform.sh` is the single source of truth for platform detection, log locations, notifications, and the minimal PATH. `setup/install.sh`, `files/bin/up`, `files/bin/ic-doctor`, `files/bin/ic-link`, and `files/zsh/ic-workflow.zsh` all source it. Do not reintroduce a second copy of that logic in any of them. `ic-workflow.zsh` is sourced by every interactive shell, so it settles macOS from `$OSTYPE` and only sources `platform.sh` elsewhere; resolve the platform once at the top of that file rather than per alias.
+
+## Cross-platform layout
+
+macOS is activated by nix-darwin, which owns the whole machine. Linux and WSL are activated by standalone Home Manager, which owns the user environment only; nix-darwin has no equivalent for an existing distro, so there is deliberately no system-level layer there.
+
+- Entry points: `nix/user.nix` (macOS), `nix/linux-user.nix`, `nix/wsl-user.nix`.
+- Layers they compose, in `nix/home/`: `common.nix` (cross-platform), `desktop.nix` (fonts and linked app configs; not composed into WSL, which has no display server), `darwin.nix` (launchd agent, macOS home), `linux.nix` (systemd user timer, Linux home, `programs.home-manager.enable`), `wsl.nix` (Windows interop aliases, timer left disabled).
+- `flake.nix` exposes `darwinConfigurations.mac` plus four `homeConfigurations`: `<user>@linux`, `<user>@linux-aarch64`, `<user>@wsl`, `<user>@wsl-aarch64`. The per-architecture split exists so an ARM machine does not rebuild for x86_64; each configuration is passed its own name as `profileName` so its `rebuild` alias points back at the profile it was built from.
+- Nix has no native Windows support. `setup/windows.ps1` therefore sets up WSL2 and runs the Linux bootstrap inside it; it never installs anything on Windows proper. It must clone into the distro's own filesystem, not `/mnt/c`, because the config links out of the checkout by absolute path.
 
 ## Upstream sync
 
@@ -25,6 +39,16 @@ Upstream has marked itself superseded by `kunchenguid/dotfiles`, a different rep
 ## Fresh-machine single-pass contract
 
 `setup/mac.sh` must bootstrap a brand-new Mac in one run, with no "run it again in a new shell" step. After the Determinate installer runs, the script sources the Nix daemon profile (`NIX_DAEMON_PROFILE`, defaults to `/nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh`) into the current shell so `nix` is usable immediately, then activates nix-darwin for the first time via `sudo <absolute nix path> --extra-experimental-features "nix-command flakes" run nix-darwin/master#darwin-rebuild -- switch --flake ...` (absolute path because `sudo` doesn't inherit the newly-sourced PATH). `NIX_DAEMON_PROFILE` and `DARWIN_REBUILD_BIN` are both overridable via environment variables (defaulting to the real canonical paths) specifically so tests can point them at a sandbox instead of the real filesystem. Any future edit to this bootstrap logic must preserve: single-pass success on a fresh machine, and the existing already-installed fast path (`$DARWIN_REBUILD_BIN switch`) staying untouched.
+
+## Testing
+
+Three suites:
+
+- `bash tests/mac_setup_test.sh` - `setup/mac.sh` against stubs, described below.
+- `bash tests/install_dispatch_test.sh` - `setup/install.sh` detection and dispatch. Uses `--dry-run` to stop before the `exec`, and masks `PATH` with stub `uname` executables so the platform under test is chosen rather than inherited. Installs nothing; runs anywhere.
+- `bash tests/linux_e2e_docker.sh` - a real Nix build and Home Manager activation for the Linux and WSL profiles in a container, asserting on the resulting environment. Needs Docker and skips itself without it. It stages the working tree rather than `HEAD`, so uncommitted changes are covered.
+
+Two things are deliberately not covered by any suite, and claims about them must not be made: the Determinate installer branch of `setup/linux.sh` (the container image already ships Nix, so that branch is skipped, exactly as `setup/mac.sh`'s installer branch is never really run), and `setup/windows.ps1` in its entirety, which needs Windows and PowerShell.
 
 ## Testing setup/mac.sh
 

@@ -12,11 +12,19 @@
 # only report how far behind upstream each fork is.
 set -uo pipefail
 
-# Tools must be found under launchd's minimal environment.
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/run/current-system/sw/bin:/etc/profiles/per-user/$USER/bin:$HOME/go/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+# Platform differences (PATH, log location, notifications) live in one place,
+# shared with the installer and ic-doctor. Derived from this script's own
+# location so it resolves under launchd and systemd alike.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../../setup/lib/platform.sh
+. "$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)/setup/lib/platform.sh"
+
+# Tools must be found under launchd's and systemd's minimal environment.
+PATH="$(ic_default_path)"
+export PATH
 
 GH_ROOT="$HOME/github"
-LOG="$HOME/Library/Logs/sync-forks.log"
+LOG="$(ic_log_dir)/sync-forks.log"
 REPOS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi wheelhouse quota-axi"
 mkdir -p "$(dirname "$LOG")"
 
@@ -24,7 +32,7 @@ DRY=0
 [ "${1:-}" = "--dry-run" ] && DRY=1
 
 log()    { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG"; }
-notify() { osascript -e "display notification \"$2\" with title \"$1\"" >/dev/null 2>&1 || true; }
+notify() { ic_notify "$1" "$2"; }
 
 rebuild_tool() {
   case "$1" in

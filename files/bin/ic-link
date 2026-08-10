@@ -12,13 +12,31 @@ set -euo pipefail
 GH_ROOT="$HOME/github"
 SELF_REPO=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)
 
+# Platform detection is shared with the installer, the updater, and the health
+# check so the four cannot disagree about which entry module is in force.
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=../../setup/lib/platform.sh
+. "$SELF_REPO/setup/lib/platform.sh"
+
 # The links below are durable state in $HOME and are read long after ic-link
-# exits, so they point at the checkout nix/user.nix declares as dotfilesDir,
+# exits, so they point at the checkout the entry module declares as dotfilesDir,
 # not at whatever tree ic-link happened to be invoked from. Running ic-link
 # from a git worktree therefore still writes links that survive the worktree.
+# Each platform activates its own entry module with its own literal, so read the
+# one actually in force here, exactly as ic-doctor does.
 # Falls back to the invoking checkout when the literal cannot be parsed.
-declared_rel=$(sed -n 's/.*dotfilesDir = "${config\.home\.homeDirectory}\([^"]*\)".*/\1/p' \
-  "$SELF_REPO/nix/user.nix" 2>/dev/null | head -1 || true)
+case "$(ic_detect_target)" in
+  darwin) ENTRY_MODULE="$SELF_REPO/nix/user.nix" ;;
+  linux)  ENTRY_MODULE="$SELF_REPO/nix/linux-user.nix" ;;
+  wsl)    ENTRY_MODULE="$SELF_REPO/nix/wsl-user.nix" ;;
+  *)      ENTRY_MODULE="" ;;
+esac
+if [ -n "$ENTRY_MODULE" ]; then
+  declared_rel=$(sed -n 's/.*dotfilesDir = "${config\.home\.homeDirectory}\([^"]*\)".*/\1/p' \
+    "$ENTRY_MODULE" 2>/dev/null | head -1 || true)
+else
+  declared_rel=""
+fi
 if [ -n "$declared_rel" ]; then
   DOTFILES="$HOME$declared_rel"
 else

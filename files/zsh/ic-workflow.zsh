@@ -1,6 +1,6 @@
 # =============================================================================
 # IC Workflow: aliases, functions, and shell options for a top-tier IC.
-# Sourced from nix/user.nix (programs.zsh.initContent).
+# Sourced from nix/home/common.nix (programs.zsh.initContent).
 # Plain zsh so it is easy to read, edit, and extend without a nix rebuild.
 # Everything that depends on an optional tool is guarded with `command -v`.
 # =============================================================================
@@ -14,6 +14,28 @@
 # -----------------------------------------------------------------------------
 IC_DOTFILES=${${(%):-%x}:A:h:h:h}
 [ -d "$IC_DOTFILES/files/zsh" ] || IC_DOTFILES="$HOME/github/dotfiles-nix"
+
+# -----------------------------------------------------------------------------
+# Platform, resolved once. This file is sourced by every interactive shell, so
+# the handful of aliases that differ per platform branch on these two variables
+# rather than probing the system again one alias at a time.
+#
+# macOS is settled from $OSTYPE without forking anything. Elsewhere this sources
+# setup/lib/platform.sh, the same source of truth setup/install.sh, files/bin/up
+# and files/bin/ic-doctor use, so the Home Manager profile an alias here builds
+# can never drift from the one those activate.
+# -----------------------------------------------------------------------------
+IC_PLATFORM=unknown
+IC_HM_PROFILE=""
+if [[ "$OSTYPE" == darwin* ]]; then
+  IC_PLATFORM=darwin
+elif [ -r "$IC_DOTFILES/setup/lib/platform.sh" ]; then
+  source "$IC_DOTFILES/setup/lib/platform.sh"
+  IC_PLATFORM=$(ic_detect_target)
+  case "$IC_PLATFORM" in
+    linux|wsl) IC_HM_PROFILE=$(ic_profile_for "$IC_PLATFORM" "$(ic_detect_arch)") ;;
+  esac
+fi
 
 # -----------------------------------------------------------------------------
 # Shell options: sane, fast, low-friction interactive behavior.
@@ -96,7 +118,9 @@ fi
 alias e='${EDITOR:-vim}'
 alias cl='clear'
 alias reload='exec zsh'
-alias zshrc="\${EDITOR:-vim} ${(q)IC_DOTFILES}/nix/user.nix"
+# The zsh configuration lives in the shared home layer, not in a platform entry
+# module, so this target is correct on macOS, Linux, and WSL alike.
+alias zshrc="\${EDITOR:-vim} ${(q)IC_DOTFILES}/nix/home/common.nix"
 alias icwf="\${EDITOR:-vim} ${(q)IC_DOTFILES}/files/zsh/ic-workflow.zsh"
 
 # -----------------------------------------------------------------------------
@@ -219,16 +243,27 @@ fi
 command -v k9s >/dev/null && alias k9='k9s'
 
 # -----------------------------------------------------------------------------
-# Nix / darwin
+# Nix
 # -----------------------------------------------------------------------------
-alias nbuild="darwin-rebuild build --flake ${(q)IC_DOTFILES}#mac"
 alias ncheck="nix flake check ${(q)IC_DOTFILES}"
 alias nup="nix flake update --flake ${(q)IC_DOTFILES}"
 alias ngc='nix-collect-garbage -d'
 alias nsearch='nix search nixpkgs'
 alias nrun='nix run'
 alias nshell='nix shell'
-alias ngen='darwin-rebuild --list-generations'
+
+# `nbuild` builds without activating and `ngen` lists generations on every
+# platform, so the muscle memory carries across machines; only the tool
+# underneath differs. macOS builds a whole system generation through
+# nix-darwin, while Linux and WSL build the standalone Home Manager profile
+# resolved above -- the same one `rebuild` and `up` switch.
+if [ "$IC_PLATFORM" = darwin ]; then
+  alias nbuild="darwin-rebuild build --flake ${(q)IC_DOTFILES}#mac"
+  alias ngen='darwin-rebuild --list-generations'
+elif [ -n "$IC_HM_PROFILE" ]; then
+  alias nbuild="home-manager build --flake ${(q)IC_DOTFILES}#${(q)IC_HM_PROFILE}"
+  alias ngen='home-manager generations'
+fi
 
 # -----------------------------------------------------------------------------
 # Languages / build tools
@@ -264,10 +299,24 @@ command -v procs >/dev/null && alias pp='procs'
 command -v tokei >/dev/null && alias loc='tokei'
 alias ports='lsof -iTCP -sTCP:LISTEN -nP'
 alias myip='curl -fsSL https://ifconfig.me; echo'
-alias localip='ipconfig getifaddr en0'
-alias flushdns='sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder'
-alias showfiles='defaults write com.apple.finder AppleShowAllFiles -bool true && killall Finder'
-alias hidefiles='defaults write com.apple.finder AppleShowAllFiles -bool false && killall Finder'
+# Platform-specific system aliases, resolved once here at source time rather
+# than probed per invocation. `localip` translates: `en0` is a macOS interface
+# name with no Linux equivalent, so elsewhere the address is taken from the
+# first globally scoped IPv4 address, whatever the interface is named on that
+# machine. The rest do not translate, and an
+# undefined alias is a better answer than one that is defined and either fails
+# or silently does nothing: Finder visibility is a Finder concept, and the
+# correct DNS cache flush depends on the resolver, so off macOS `flushdns` is
+# defined only where systemd-resolved is actually present.
+if [ "$IC_PLATFORM" = darwin ]; then
+  alias localip='ipconfig getifaddr en0'
+  alias flushdns='sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder'
+  alias showfiles='defaults write com.apple.finder AppleShowAllFiles -bool true && killall Finder'
+  alias hidefiles='defaults write com.apple.finder AppleShowAllFiles -bool false && killall Finder'
+else
+  command -v ip >/dev/null && alias localip="ip -4 -o addr show scope global | awk '{print \$4; exit}' | cut -d/ -f1"
+  command -v resolvectl >/dev/null && alias flushdns='resolvectl flush-caches'
+fi
 alias cleands='find . -type f -name .DS_Store -delete -print'
 alias path='echo $PATH | tr ":" "\n"'
 alias now='date +"%Y-%m-%d %H:%M:%S"'

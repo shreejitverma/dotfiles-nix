@@ -1,20 +1,24 @@
 # dotfiles-nix
 
-This repo is the public, reusable core of my Mac setup.
+This repo is the public, reusable core of my development setup, on macOS, Linux, and WSL.
 
-It is built with [Nix](https://nixos.org/), [`nix-darwin`](https://github.com/nix-darwin/nix-darwin), [Home Manager](https://github.com/nix-community/home-manager), and declarative [Homebrew](https://brew.sh/). The goal is to give macOS developers a reproducible base they can fork and adapt without inheriting someone else's entire private dotfiles repo.
+It is built with [Nix](https://nixos.org/), [`nix-darwin`](https://github.com/nix-darwin/nix-darwin), [Home Manager](https://github.com/nix-community/home-manager), and declarative [Homebrew](https://brew.sh/). The goal is to give developers a reproducible base they can fork and adapt without inheriting someone else's entire private dotfiles repo.
 
 If you want the longer explanation, see the [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web).
 
 ## What this repo does
 
-It gives you a structured starting point for managing a Mac setup in code:
+It gives you a structured starting point for managing a development setup in code:
 
-- bootstrap a fresh Mac with `setup/mac.sh`
+- bootstrap a machine with one command, `setup/install.sh`, which detects macOS, Linux, or WSL
 - configure macOS defaults with `nix-darwin`
-- manage user packages and shell behavior with Home Manager
+- manage user packages and shell behavior with Home Manager, identically on every platform
 - install GUI apps and macOS-native tools declaratively with Homebrew
 - keep selected app config in the repo and link it into place
+
+The same shell, prompt, git config, and CLI toolchain follow you across all three platforms.
+What differs is how deep the configuration reaches: on macOS it owns the whole machine, and on Linux and WSL it owns your user environment and leaves the distro alone.
+Windows itself is not a target, because Nix has no native Windows build; the supported path there is WSL2.
 
 App configs kept in the repo and linked into place include [WezTerm](https://wezfurlong.org/wezterm/) and herdr. Neovim config is deliberately not managed here; it lives in its own repo, [kickstart.nvim](https://github.com/shreejitverma/kickstart.nvim), checked out at `~/.config/nvim`.
 
@@ -31,17 +35,22 @@ The goal is to provide a reusable foundation that you can make your own.
 
 ## Repo structure
 
+- `setup/install.sh` - detect the platform and run the right bootstrap (start here)
 - `setup/mac.sh` - bootstrap a fresh Mac
+- `setup/linux.sh` - bootstrap a Linux or WSL machine
+- `setup/windows.ps1` - enable WSL2 on Windows, then run the Linux bootstrap inside it
+- `setup/lib/platform.sh` - shared platform detection, sourced by the installer and `files/bin`
 - `setup/README.md` - bootstrap usage and testing notes
 - `flake.nix` - top-level Nix wiring
 - `nix/host.nix` - machine-level macOS config (nix-darwin)
-- `nix/user.nix` - user environment: packages, shell, git, fonts, dotfiles (Home Manager)
+- `nix/user.nix`, `nix/linux-user.nix`, `nix/wsl-user.nix` - per-platform Home Manager entry points
+- `nix/home/` - the layers those entry points compose: `common.nix` (cross-platform), `desktop.nix` (fonts and linked app configs), `darwin.nix`, `linux.nix`, `wsl.nix`
 - `files/.config/wezterm/wezterm.lua` - WezTerm config linked into place
 - `files/.config/herdr/config.toml` - herdr config linked into place
 - `files/bin/` - personal scripts kept on `PATH`, including `sync-forks` (weekly fork sync), `ic-link` (symlink farm), and `ic-doctor` (health check)
 - `files/skills/` - agent skills owned by this repo (currently `ship`)
 - `files/zsh/ic-workflow.zsh` - IC workflow shell config sourced by zsh
-- `tests/` - regression tests for the bootstrap script
+- `tests/` - regression tests for the bootstrap scripts and the Linux end-to-end install
 - `AGENTS.md` - repo-specific notes for coding agents (`CLAUDE.md` is a symlink to it)
 - `blog.md` - local copy of the [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web)
 
@@ -75,25 +84,63 @@ to:
 system = "x86_64-darwin";
 ```
 
-### 3. Run the bootstrap script on a fresh Mac
+### 3. Run the bootstrap
 
-This repo is primarily set up for Apple Silicon Macs. If you are on Intel, make the architecture change above before you run the bootstrap script.
+One command on every platform:
 
 ```bash
-bash setup/mac.sh
+bash setup/install.sh
 ```
 
-The script will:
+It detects whether the machine is macOS, Linux, or WSL, shows you what it found, and lets you confirm or pick a different target before anything is installed.
+Non-interactively (a pipe, CI) it uses the detected target without prompting rather than hanging.
 
-- install [Determinate Nix Installer](https://determinate.systems/nix-installer/) if needed
-- install [Homebrew](https://brew.sh/) if needed
-- apply the `nix-darwin` + Home Manager config
-- install [`nvm`](https://github.com/nvm-sh/nvm) and a default Node.js version if needed
+```bash
+bash setup/install.sh --dry-run          # print the plan, install nothing
+bash setup/install.sh --target wsl --yes # skip detection and the prompt
+```
 
-On a fresh machine, the bootstrap is designed to complete in one run.
-After the Determinate installer runs, the script sources the Nix daemon profile into the current shell and uses an absolute `nix` path for the first `nix-darwin` activation, so you should not need a second shell or a second setup run.
+#### What each platform gets
 
-The `NIX_DAEMON_PROFILE` and `DARWIN_REBUILD_BIN` environment variables are only there so the regression test can point the script at sandboxed paths.
+| Platform | Activated with | Owns |
+|---|---|---|
+| macOS | `nix-darwin` + Home Manager | the whole machine: macOS defaults, Homebrew casks, launchd agents |
+| Linux | standalone Home Manager | the user environment only |
+| WSL | standalone Home Manager | the user environment, minus the desktop layer |
+
+The asymmetry is not an oversight.
+`nix-darwin` has no equivalent for an existing Linux distro, so on Linux and WSL this repo manages your packages, shell, git, and prompt, and leaves the kernel, services, display server, and distro packages alone.
+
+#### Windows
+
+Nix has no native Windows build, so there is nothing to install on Windows proper.
+The supported path is WSL2:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File setup\windows.ps1
+```
+
+That enables WSL2, installs a distro if you have none, clones this repo **inside** the distro, and runs `setup/install.sh --target wsl` there.
+The clone has to live inside the distro rather than on `/mnt/c`: the config links files out of the checkout by absolute path, and a Windows-side checkout would leave those links resolving only while the drive is mounted, over a much slower filesystem boundary.
+`setup/linux.sh` refuses such a checkout outright rather than half-installing.
+
+If you already run WSL2, skip the PowerShell script and just run `bash setup/install.sh` inside your distro.
+
+#### What the platform scripts do
+
+- macOS (`setup/mac.sh`): installs [Determinate Nix](https://determinate.systems/nix-installer/) and [Homebrew](https://brew.sh/) if needed, applies `nix-darwin` + Home Manager, installs [`nvm`](https://github.com/nvm-sh/nvm) and a default Node.js.
+  On a fresh machine this completes in one run: after the installer, the script sources the Nix daemon profile into the current shell and uses an absolute `nix` path for the first activation, so no second shell or second run is needed.
+- Linux and WSL (`setup/linux.sh`): installs Determinate Nix if needed, builds the matching Home Manager profile out of this flake, and activates it.
+  It builds the activation package from the pinned `flake.lock` rather than running `nix run home-manager/master`, so the Home Manager doing the activation is the one this repo pins instead of whatever is current upstream.
+  Where systemd is not PID 1 (WSL without `systemd=true`, containers, non-systemd distros) it installs Nix with `--init none`, because the default Linux plan registers the daemon as a systemd service.
+
+On Linux and WSL the Home Manager profile configures bash as well as zsh, because bash is the stock login shell on those platforms and the session PATH, environment, and aliases would otherwise only exist in the generated `.zshrc`.
+Bash gets the same alias set, `rebuild` included; the zsh workflow layer in `files/zsh` stays zsh-only, so `setup/linux.sh` finishes by printing the `chsh` command that switches the login shell if you want it.
+That also means Home Manager owns `~/.bashrc`, `~/.bash_profile`, and `~/.profile` there, the same way it already owns `~/.zshrc`, `~/.zshenv`, and `~/.zprofile`.
+On a machine that already had those files, `setup/linux.sh` names each one up front, before it installs or builds anything, and the originals are preserved as `<file>.backup`.
+If one of them is a symlink you own rather than a regular file, it stops there instead: Home Manager backs up a regular file it has to replace but never a symlink, so it tells you which paths to move aside first.
+
+The `NIX_DAEMON_PROFILE`, `DARWIN_REBUILD_BIN`, `WSL_OSRELEASE_FILE`, and `WSL_VERSION_FILE` environment variables exist only so the regression tests can point the scripts at sandboxed paths.
 Normal use should leave them unset.
 
 ## How I manage changes later
@@ -107,23 +154,34 @@ After the initial bootstrap, the usual workflow is:
 rebuild
 ```
 
-This alias is included in the shell config and expands to the repo path used in this guide:
+The alias is included in the shell config, and each platform's profile defines it to mean the right thing:
 
 ```bash
+# macOS
 /run/current-system/sw/bin/darwin-rebuild switch --flake ~/github/dotfiles-nix#mac
+# Linux and WSL
+home-manager switch --flake ~/github/dotfiles-nix#<user>@<linux|wsl>[-aarch64]
 ```
+
+`up` updates the whole machine: it refreshes the flake inputs, activates them the right way for the platform, and then updates Homebrew, rustup, and the tldr cache when those are present.
+
+Note that `up` runs `nix flake update` first, so it bumps the pinned inputs.
+To apply a change without moving the pins, use `rebuild`.
 
 ## Testing
 
-Do not run `setup/mac.sh` against a development or CI machine just to test it.
-Run the sandboxed regression test instead:
-
 ```bash
-bash tests/mac_setup_test.sh
+bash tests/mac_setup_test.sh        # setup/mac.sh, against stubs
+bash tests/install_dispatch_test.sh # platform detection and dispatch, against stubs
+bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
 
-It runs the real script logic against a sandbox of stub executables, so nothing is ever installed or activated.
-See [`tests/README.md`](tests/README.md) for the scenarios it covers and how the sandbox is guarded.
+Do not run `setup/mac.sh`, `setup/linux.sh`, or `setup/install.sh` against a development or CI machine just to test them.
+The first two suites above run the real script logic against a sandbox of stub executables, so nothing is ever installed or activated, and they run anywhere.
+The third needs Docker and skips itself without it; it performs a genuine Nix build and Home Manager activation inside a container, then asserts on the environment that results.
+
+Two gaps are deliberate and documented: the Determinate installer branch of `setup/linux.sh` is not exercised (the container image already ships Nix), and `setup/windows.ps1` is not covered at all, since it needs Windows and PowerShell.
+See [`tests/README.md`](tests/README.md) for the scenarios each suite covers and how the sandbox is guarded.
 
 ## Where to add new tools
 
@@ -132,6 +190,17 @@ My rough rule of thumb:
 - use **Home Manager / Nix** for reproducible baseline CLI tools, fonts, shell utilities, and user environment packages
 - use **Homebrew** for GUI apps and macOS-native tools that fit naturally there
 - use **ecosystem-specific package managers** like `npm` when that is the right abstraction for the tool
+
+Where a tool goes in `nix/home/` decides which platforms get it:
+
+| Add it to | Reaches |
+|---|---|
+| `nix/home/common.nix` | macOS, Linux, and WSL |
+| `nix/home/desktop.nix` | macOS and Linux; skipped on WSL, which has no display server |
+| `nix/home/darwin.nix`, `linux.nix`, `wsl.nix` | that platform only |
+| `nix/host.nix` (Homebrew, macOS defaults) | macOS only, by nature |
+
+Default to `common.nix`. Only reach for a platform file when the option genuinely does not exist elsewhere, such as `launchd` on macOS or `systemd.user` on Linux.
 
 A good setup does not force every tool through one package manager. It just makes the ownership of each layer clear.
 The [complete software inventory](#complete-software-inventory) below records which layer owns every installed piece of software.
@@ -149,7 +218,7 @@ That is why this repo focuses on the reusable core.
 
 ## The agent-first IC toolchain
 
-Beyond the base Mac setup, this machine runs an integrated toolchain for working as a single individual contributor with a crew of coding agents.
+Beyond the base setup, this machine runs an integrated toolchain for working as a single individual contributor with a crew of coding agents.
 Every tool below is a fork of a [kunchenguid](https://github.com/kunchenguid) repo, kept in sync with upstream automatically.
 This section documents how it is wired on my system today, and then gives the exact commands to reproduce the whole setup from scratch.
 
@@ -211,7 +280,7 @@ One skill is owned by this repo rather than a tool fork: `ship` (`files/skills/s
 
 **4. Weekly sync.**
 `files/bin/sync-forks` fetches upstream for every repo in its `REPOS` list, merges `upstream/main` into `main` (keeping local changes; conflicts abort and notify instead of clobbering), pushes the fork, and rebuilds the affected binaries.
-A launchd agent defined in `nix/user.nix` runs it every Sunday at 10:00, logging to `~/Library/Logs/sync-forks*.log`.
+A launchd agent defined in `nix/home/darwin.nix` runs it every Sunday at 10:00 on macOS; `nix/home/linux.nix` schedules the same run as a systemd user timer, and `nix/home/wsl.nix` ships that timer disabled.
 `syncforks` and `syncforks-dry` run it by hand.
 
 **5. Shell ergonomics.**
@@ -251,10 +320,11 @@ This is the full map; if something is installed and not listed here, it is unman
 | Layer | Owner | What it installs |
 |---|---|---|
 | OS toolchain | Apple | Xcode Command Line Tools: `git` (pre-Nix), `make`, `clang` (`xcode-select --install`) |
-| Bootstrap | `setup/mac.sh` | Determinate Nix, Homebrew, nvm + Node LTS (fallback; the primary Node is Homebrew's) |
+| Bootstrap | `setup/install.sh` -> `setup/mac.sh` | Determinate Nix, Homebrew, nvm + Node LTS (fallback; the primary Node is Homebrew's) |
 | System config | `nix/host.nix` | `starship`; brew formulas `autoconf`, `herdr`; casks `wezterm`, `amethyst`, `opensuperwhisper`; macOS defaults (incl. OpenSuperWhisper Cmd+` record hotkey) |
-| User packages | `nix/user.nix` `home.packages` | `git curl wget jq fd fastfetch ripgrep killall lazygit tree bun rustup zip unzip just dust duf procs sd btop tokei tealdeer uv ruff difftastic` + fonts (Hack Nerd Font, Roboto, Noto, Font Awesome) |
-| User programs | `nix/user.nix` `programs.*` | `git`+`delta`, `starship`, `bat`, `fzf`, `zoxide`, `atuin`, `direnv`, `zsh`, `eza` |
+| User packages | `nix/home/common.nix` `home.packages` | `git curl wget jq fd fastfetch ripgrep killall lazygit tree bun rustup zip unzip just dust duf procs sd btop tokei tealdeer uv ruff difftastic` |
+| User programs | `nix/home/common.nix` `programs.*` | `git`+`delta`, `starship`, `bat`, `fzf`, `zoxide`, `atuin`, `direnv`, `zsh`, `eza` |
+| Desktop layer | `nix/home/desktop.nix` | fonts (Hack Nerd Font, Roboto, Noto, Font Awesome) and the linked WezTerm and herdr configs |
 | Manual Homebrew | `brew` (not yet declared in nix) | formulas `node`, `go`, `gh`; casks `google-chrome` (required by chrome-devtools-axi), `codex` |
 | npm globals | `npm install -g` | `pnpm` (build tool for all Node forks) |
 | Native installers | vendor scripts | `claude` (Claude Code, `curl -fsSL https://claude.ai/install.sh \| bash`) |
@@ -270,6 +340,7 @@ Moving those five entries into `homebrew.brews`/`homebrew.casks` would make them
 
 These are the exact commands to reproduce this system on a new Mac.
 Nothing is assumed beyond a fresh macOS install with an admin account.
+The IC toolchain below is macOS-first: the base Nix layer installs on Linux and WSL too, but several tools in this section come from Homebrew casks and have no Linux equivalent here yet.
 
 **Step 0: prerequisites and base system.**
 
@@ -277,9 +348,12 @@ Nothing is assumed beyond a fresh macOS install with an admin account.
 xcode-select --install          # Apple CLT: git, make, clang (accept the GUI prompt)
 git clone https://github.com/<you>/dotfiles-nix.git ~/github/dotfiles-nix
 cd ~/github/dotfiles-nix
-bash setup/mac.sh               # installs Nix, Homebrew, applies nix-darwin + Home Manager, installs nvm + Node LTS
+bash setup/install.sh           # detects macOS; installs Nix, Homebrew, nix-darwin + Home Manager, nvm + Node LTS
 exec zsh                        # pick up the new environment
 ```
+
+On Linux or WSL the same first command applies, and `setup/install.sh` dispatches to the Home Manager path instead.
+On Windows, run `powershell -ExecutionPolicy Bypass -File setup\windows.ps1` first; it prepares WSL2 and runs the Linux bootstrap inside it.
 
 Then the runtimes and apps the toolchain needs, which the base config does not install:
 
@@ -400,7 +474,8 @@ npx skills add <owner>/<repo> --skill <name> -g   # -g = all projects (~/.claude
 ic-doctor
 ```
 
-`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in `nix/user.nix`, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the launchd sync agent and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md`, and codex skills).
+`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the weekly sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md`, and codex skills).
+Checks that do not apply to a platform are reported as such rather than failed: WSL has no desktop layer, so the linked terminal configs are not expected there, and its sync timer is left disabled because systemd is off by default.
 It exits non-zero if anything needs attention, and every failure line names the command that fixes it.
 A healthy system ends with `ic-doctor: all checks passed`.
 
@@ -428,9 +503,34 @@ The checklist when adopting the next tool, so it inherits all five layers:
   If the overlap ever conflicts, disable the system shortcut manually in System Settings > Keyboard > Keyboard Shortcuts > Keyboard.
   The hotkey preference is applied by `rebuild`; restart OpenSuperWhisper after changing it.
 - **`Ctrl-R` opens atuin's history search, not fzf's.**
-  That is deliberate: both `programs.fzf` and `programs.atuin` want `Ctrl-R`, and `nix/user.nix` cedes it to atuin with `programs.fzf.historyWidget.command = ""`.
+  That is deliberate: both `programs.fzf` and `programs.atuin` want `Ctrl-R`, and `nix/home/common.nix` cedes it to atuin with `programs.fzf.historyWidget.command = ""`.
   fzf keeps `Ctrl-T` (files) and `Alt-C` (directories).
   To flip the ownership, drop that line and add `"--disable-ctrl-r"` to `programs.atuin.flags`.
+- **The installer picked the wrong platform, or you want a different one.**
+  Run `bash setup/install.sh --dry-run` to see what it detected and what it would do, then `--target <darwin|linux|wsl>` to override it.
+  WSL is detected from `$WSL_DISTRO_NAME`, `$WSL_INTEROP`, `/proc/sys/kernel/osrelease`, or `/proc/version`; any one of them is enough.
+- **`Could not find suitable profile directory` during a Linux or WSL install.**
+  Home Manager will not activate without a per-user Nix profile directory, and it does not exist for a user who has never run a `nix` command.
+  `setup/linux.sh` creates it, so this only appears if you activated by hand; run `mkdir -p ~/.local/state/nix/profiles` and retry.
+- **The Nix installer fails on WSL or in a container complaining about systemd.**
+  The Determinate installer's default Linux plan registers the daemon as a systemd service, which cannot work where systemd is not PID 1.
+  `setup/linux.sh` detects that and installs with `--init none` instead. WSL only runs systemd if you enable it explicitly in `/etc/wsl.conf`.
+- **My `~/.bashrc` was replaced on Linux or WSL.**
+  The Linux and WSL profiles manage the bash startup files (`~/.bashrc`, `~/.bash_profile`, `~/.profile`) as well as the zsh ones, which is what makes this repo's `PATH`, session variables, and aliases work in a bash login shell rather than only under zsh.
+  `setup/linux.sh` names each file it is about to take over before it installs or builds anything, and every original is preserved next to it as `<file>.backup`, so `mv ~/.bashrc.backup ~/.bashrc` puts the distro default back.
+  That restore only lasts until the next `rebuild`: `programs.bash` stays enabled, so Home Manager takes the file over again and backs up your restored copy in turn.
+  To keep content for good, put it in `programs.bash.initExtra` (or `bashrcExtra`) in `nix/home/linux.nix` instead, where it becomes part of the generated file.
+  If you later recreate a real `~/.bashrc` while `~/.bashrc.backup` is still there, the next activation stops with `Existing file ... would be clobbered by backing up ...` rather than overwriting the backup; move or delete the stale `.backup` file and retry.
+- **`setup/linux.sh` stops because a startup file is a symlink Home Manager does not own.**
+  Home Manager backs up a regular file it needs to replace, but its collision check skips the backup entirely for a symlink, so activation would fail partway with `would be clobbered` after the whole build had already run.
+  The installer checks for this before it installs or builds anything and names each path; `mv ~/.bashrc ~/.bashrc.pre-home-manager` and re-run.
+  This also fires on a symlink whose content happens to match what Home Manager would write, which activation would have skipped harmlessly; moving it aside costs nothing and the check stays honest about what it can predict.
+- **The weekly fork sync never runs on WSL.**
+  That is deliberate: the timer is shipped disabled there because systemd is off by default.
+  Run `syncforks` by hand, or enable systemd in `/etc/wsl.conf` and switch to the Linux profile behaviour.
+- **`setup/linux.sh` refuses a checkout under `/mnt/c`.**
+  Also deliberate. The config links files out of the checkout by absolute path, so a Windows-side checkout resolves only while the drive is mounted, and is much slower over the filesystem boundary.
+  Clone inside the distro at `~/github/dotfiles-nix`.
 - **quota-axi shows `auth_required` for claude.**
   Keychain access has not been granted; run `quota-axi --allow-keychain-prompt auth` and click "Always Allow".
 - **sync-forks skipped a repo.**
@@ -438,7 +538,8 @@ The checklist when adopting the next tool, so it inherits all five layers:
 - **sync-forks reported a conflict.**
   It aborted the merge and left the repo untouched; resolve by hand with `git merge upstream/main` in that clone, keeping your changes.
 - **Where are the sync logs?**
-  `~/Library/Logs/sync-forks.log` (script log) plus `sync-forks.out.log` and `sync-forks.err.log` (launchd streams).
+  On macOS, `~/Library/Logs/sync-forks.log` (script log) plus `sync-forks.out.log` and `sync-forks.err.log` (launchd streams).
+  On Linux and WSL there is no `~/Library`, so the script log follows the XDG state directory instead: `${XDG_STATE_HOME:-~/.local/state}/sync-forks.log`, with the run's own output in `journalctl --user -u sync-forks`.
 - **A skill or instruction symlink is missing or points somewhere stale.**
   Run `ic-link`; it recreates the entire farm idempotently.
 - **Everything else.**
