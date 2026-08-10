@@ -297,14 +297,23 @@ command -v procs >/dev/null && alias pp='procs'
 command -v tokei >/dev/null && alias loc='tokei'
 alias ports='lsof -iTCP -sTCP:LISTEN -nP'
 alias myip='curl -fsSL https://ifconfig.me; echo'
-alias localip='ipconfig getifaddr en0'
-alias flushdns='sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder'
-# Finder visibility has no equivalent outside macOS, so these are simply not
-# defined elsewhere; an undefined alias is a better answer than one that is
-# defined and fails when invoked.
+# Platform-specific system aliases, resolved once here at source time rather
+# than probed per invocation. `localip` translates: `en0` is a macOS interface
+# name with no Linux equivalent, so elsewhere the address is taken from the
+# first globally scoped IPv4 address, whatever the interface is named on that
+# machine. The rest do not translate, and an
+# undefined alias is a better answer than one that is defined and either fails
+# or silently does nothing: Finder visibility is a Finder concept, and the
+# correct DNS cache flush depends on the resolver, so off macOS `flushdns` is
+# defined only where systemd-resolved is actually present.
 if [ "$IC_PLATFORM" = darwin ]; then
+  alias localip='ipconfig getifaddr en0'
+  alias flushdns='sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder'
   alias showfiles='defaults write com.apple.finder AppleShowAllFiles -bool true && killall Finder'
   alias hidefiles='defaults write com.apple.finder AppleShowAllFiles -bool false && killall Finder'
+else
+  command -v ip >/dev/null && alias localip="ip -4 -o addr show scope global | awk '{print \$4; exit}' | cut -d/ -f1"
+  command -v resolvectl >/dev/null && alias flushdns='resolvectl flush-caches'
 fi
 alias cleands='find . -type f -name .DS_Store -delete -print'
 alias path='echo $PATH | tr ":" "\n"'
