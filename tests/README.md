@@ -8,6 +8,7 @@ bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 
 The first two never install anything and run anywhere.
 The third needs Docker and skips itself when Docker is unavailable.
+All three honour `DEBUG_KEEP_SANDBOX=1`, which leaves the scratch directory each one works in (per scenario, for `mac_setup_test.sh`) on disk for inspection after a failing run instead of removing it on exit.
 
 `mac_setup_test.sh` is a regression test for `setup/mac.sh`.
 It never runs the script against the real machine, since that script installs Nix and activates a real `nix-darwin` system.
@@ -50,6 +51,7 @@ That guard is what stops a WSL install from running against a `/mnt/c` checkout,
 Masking down to `/usr/bin:/bin` would not be enough on its own: a stock macOS or Linux host has a real `curl` sitting there.
 The same wrongly-placed fixture is then run with `PATH` masked down to just the three binaries the guard legitimately needs, so `sed` is genuinely absent (and so are `curl` and `nix`).
 That is the regression case: the guard used to read the `dotfilesDir` literal by shelling out to `sed`, and a userland without it produced an empty answer and skipped the check entirely.
+No `setup/linux.sh` case in this suite is left with a working `curl` or `nix` on its `PATH`, so none can reach a real installer or a real build even if a guard regresses; keep that property when adding a case.
 
 The profile name is asserted to come from the `username` literal in `flake.nix` rather than from a constant in the shell, using a fixture whose flake declares a different user.
 `install.sh` must resolve `alice@linux` there, `linux.sh` must reject a stale `shreejitverma@linux` naming the username the flake actually declares, and it must do so before the installer is reached.

@@ -35,9 +35,9 @@ This repo is a fork of `kunchenguid/dotfiles-mac-nix`, wired as the `upstream` r
 Sync with `git fetch upstream && git merge upstream/main`, keeping the fork-specific layers above intact when resolving conflicts.
 Upstream has marked itself superseded by `kunchenguid/dotfiles`, a different repo that is not this fork's parent, so that notice is deliberately not carried into this README.
 
-## setup/mac.sh: never run it for real
+## The bootstrap scripts: never run them for real
 
-`setup/mac.sh` installs Nix (via the Determinate installer) and runs a real `nix-darwin` system activation (`darwin-rebuild switch` / `sudo nix run ... switch`). Never execute it, the real Determinate installer, `darwin-rebuild switch`, `sudo nix run ...`, the Homebrew installer, or the nvm installer against a dev machine or CI host - these mutate the host permanently. All validation of this script must go through `tests/mac_setup_test.sh`, which runs the actual script with PATH masked to stub executables so nothing real is ever installed or activated.
+`setup/mac.sh` installs Nix (via the Determinate installer) and runs a real `nix-darwin` system activation (`darwin-rebuild switch` / `sudo nix run ... switch`); `setup/linux.sh` installs Nix and activates a real Home Manager profile; `setup/install.sh` ends in `exec` on one of the two. Never execute any of the three, the real Determinate installer, `darwin-rebuild switch`, `sudo nix run ...`, the Homebrew installer, or the nvm installer against a dev machine or CI host - these mutate the host permanently. All validation of them must go through the suites below, which run the actual scripts with `PATH` masked to stub executables so nothing real is ever installed or activated.
 
 ## Fresh-machine single-pass contract
 
@@ -47,18 +47,17 @@ Upstream has marked itself superseded by `kunchenguid/dotfiles`, a different rep
 
 Three suites:
 
-- `bash tests/mac_setup_test.sh` - `setup/mac.sh` against stubs, described below.
-- `bash tests/install_dispatch_test.sh` - `setup/install.sh` detection and dispatch. Uses `--dry-run` to stop before the `exec`, and masks `PATH` with stub `uname` executables so the platform under test is chosen rather than inherited. No `setup/linux.sh` case is left with a working `curl` or `nix` on its `PATH`, so none can reach the Determinate installer or a real `nix` build even if a guard regresses; keep that property when adding a case, and see `tests/README.md` for how each one arranges it. Installs nothing; runs anywhere.
-- `bash tests/linux_e2e_docker.sh` - a real Nix build and Home Manager activation for the Linux and WSL profiles in a container, asserting on the resulting environment. Needs Docker and skips itself without it. It stages the working tree rather than `HEAD`, so uncommitted changes are covered.
+```bash
+bash tests/mac_setup_test.sh        # setup/mac.sh, stubbed
+bash tests/install_dispatch_test.sh # setup/install.sh detection and dispatch, stubbed
+bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
+```
+
+The first two install nothing and run anywhere; the third needs Docker and skips itself without it.
+
+`tests/README.md` is the authoritative description of what each suite covers - the stubs, the scenarios, the fixture placement, and the sandbox guards - and is the file to update when a suite changes. Do not restate that detail here.
 
 Two things are deliberately not covered by any suite, and claims about them must not be made: the Determinate installer branch of `setup/linux.sh` (the container image already ships Nix, so that branch is skipped, exactly as `setup/mac.sh`'s installer branch is never really run), and `setup/windows.ps1` in its entirety, which needs Windows and PowerShell.
-
-## Testing setup/mac.sh
-
-Run `bash tests/mac_setup_test.sh`. It simulates a fresh Mac by copying the repo into a scratch fixture (placeholders pre-replaced), building stub `curl`/`sh`/`nix`/`darwin-rebuild`/`sudo`/`bash` executables that record invocations and fake just enough side effects (a profile script, a `nix` binary) for the script to progress, then running the real `setup/mac.sh` against that PATH-masked sandbox. It covers the fresh-machine path (single-pass activation), a fresh machine with no committed `flake.lock` (user-owned lock generation ordered ahead of the `sudo` activation), the already-installed fast path, and a checkout relocated away from its declared `dotfilesDir` (which must abort before any installer, sudo, or activation call). It never touches the real network, Nix store, Homebrew, sudo, or system state. Set `DEBUG_KEEP_SANDBOX=1` to keep the scratch sandbox around for inspection after a failing run.
-
-Each scenario sandboxes `HOME`, checks the fixture out at the `dotfilesDir` the config declares under that `HOME` (except the scenario that deliberately relocates it), re-homes `NVM_DIR` under that temp root, and unsets inherited `BASH_ENV`/`ENV` before invoking `setup/mac.sh` (an inherited absolute `NVM_DIR` from hm-session-vars would otherwise leak stub writes).
-Harness and stub writes call `assert_path_under_sandbox` / `guard_write_path` so a future leak through parent traversal, symlink escape, or another absolute write path fails the test instead of mutating the host.
 
 ## Maintaining this file
 
