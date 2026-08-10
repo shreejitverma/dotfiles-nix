@@ -152,10 +152,18 @@ in
     enableZshIntegration = true;
     defaultCommand = "fd --type f --hidden --follow --exclude .git";
     defaultOptions = [ "--height 60%" "--layout=reverse" "--border" "--info=inline" ];
-    fileWidgetCommand = "fd --type f --hidden --follow --exclude .git";
-    fileWidgetOptions = [ "--preview 'bat --style=numbers --color=always {} 2>/dev/null || cat {}'" ];
-    changeDirWidgetCommand = "fd --type d --hidden --follow --exclude .git";
-    changeDirWidgetOptions = [ "--preview 'eza --tree --level=2 --color=always {} 2>/dev/null || ls {}'" ];
+    fileWidget = {
+      command = "fd --type f --hidden --follow --exclude .git";
+      options = [ "--preview 'bat --style=numbers --color=always {} 2>/dev/null || cat {}'" ];
+    };
+    changeDirWidget = {
+      command = "fd --type d --hidden --follow --exclude .git";
+      options = [ "--preview 'eza --tree --level=2 --color=always {} 2>/dev/null || ls {}'" ];
+    };
+    # Atuin owns Ctrl-R: its zsh integration is sourced after fzf's, so it already
+    # won this binding. Ceding it explicitly keeps the behavior but drops the
+    # ambiguity Home Manager now warns about.
+    historyWidget.command = "";
   };
 
   programs.zoxide = {

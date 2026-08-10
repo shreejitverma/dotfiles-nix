@@ -427,6 +427,10 @@ The checklist when adopting the next tool, so it inherits all five layers:
   ``Cmd+` `` is also macOS's default "Move focus to next window" shortcut; the record hotkey declared in `nix/host.nix` deliberately overlaps it and leaves the system binding untouched.
   If the overlap ever conflicts, disable the system shortcut manually in System Settings > Keyboard > Keyboard Shortcuts > Keyboard.
   The hotkey preference is applied by `rebuild`; restart OpenSuperWhisper after changing it.
+- **`Ctrl-R` opens atuin's history search, not fzf's.**
+  That is deliberate: both `programs.fzf` and `programs.atuin` want `Ctrl-R`, and `nix/user.nix` cedes it to atuin with `programs.fzf.historyWidget.command = ""`.
+  fzf keeps `Ctrl-T` (files) and `Alt-C` (directories).
+  To flip the ownership, drop that line and add `"--disable-ctrl-r"` to `programs.atuin.flags`.
 - **quota-axi shows `auth_required` for claude.**
   Keychain access has not been granted; run `quota-axi --allow-keychain-prompt auth` and click "Always Allow".
 - **sync-forks skipped a repo.**
