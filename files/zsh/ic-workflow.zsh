@@ -118,7 +118,9 @@ fi
 alias e='${EDITOR:-vim}'
 alias cl='clear'
 alias reload='exec zsh'
-alias zshrc="\${EDITOR:-vim} ${(q)IC_DOTFILES}/nix/user.nix"
+# The zsh configuration lives in the shared home layer, not in a platform entry
+# module, so this target is correct on macOS, Linux, and WSL alike.
+alias zshrc="\${EDITOR:-vim} ${(q)IC_DOTFILES}/nix/home/common.nix"
 alias icwf="\${EDITOR:-vim} ${(q)IC_DOTFILES}/files/zsh/ic-workflow.zsh"
 
 # -----------------------------------------------------------------------------
