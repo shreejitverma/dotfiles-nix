@@ -49,15 +49,16 @@ Earlier sync PRs were squash-merged for exactly this reason; the ancestry was re
 
 ## Testing
 
-Three suites:
+Four suites:
 
 ```bash
 bash tests/mac_setup_test.sh        # setup/mac.sh, stubbed
 bash tests/install_dispatch_test.sh # setup/install.sh detection and dispatch, stubbed
+bash tests/sync_forks_test.sh       # files/bin/sync-forks, sandboxed git fixtures
 bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
 
-The first two install nothing and run anywhere; the third needs Docker and skips itself without it.
+All but the last install nothing and run anywhere; `linux_e2e_docker.sh` needs Docker and skips itself without it.
 
 `tests/README.md` is the authoritative description of what each suite covers - the stubs, the scenarios, the fixture placement, and the sandbox guards - and is the file to update when a suite changes. Do not restate that detail here.
 
