@@ -161,10 +161,13 @@ The alias is included in the shell config, and each platform's profile defines i
 
 ```bash
 # macOS
-/run/current-system/sw/bin/darwin-rebuild switch --flake ~/github/dotfiles-nix#mac
+/run/current-system/sw/bin/darwin-rebuild switch --flake "$HOME/github/dotfiles-nix#mac"
 # Linux and WSL
-home-manager switch --flake ~/github/dotfiles-nix#<user>@<linux|wsl>[-aarch64]
+home-manager switch --flake "$HOME/github/dotfiles-nix#<user>@<linux|wsl>[-aarch64]"
 ```
+
+Keep the flake reference quoted if you type these by hand: the zsh workflow layer enables `EXTENDED_GLOB`, which makes an unquoted `#` a glob operator, so the unquoted form fails with "no matches found" before the rebuild tool ever runs.
+The aliases quote it for the same reason.
 
 `up` updates the whole machine: it refreshes the flake inputs, activates them the right way for the platform, and then updates Homebrew, rustup, and the tldr cache when those are present.
 
