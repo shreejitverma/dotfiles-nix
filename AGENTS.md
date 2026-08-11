@@ -35,6 +35,10 @@ This repo is a fork of `kunchenguid/dotfiles-mac-nix`, wired as the `upstream` r
 Sync with `git fetch upstream && git merge upstream/main`, keeping the fork-specific layers above intact when resolving conflicts.
 Upstream has marked itself superseded by `kunchenguid/dotfiles`, a different repo that is not this fork's parent, so that notice is deliberately not carried into this README.
 
+Merge sync PRs with the "Create a merge commit" method, never squash or rebase.
+A squash discards the merge parent, so `upstream/main` never becomes an ancestor of `main` and the same files re-conflict on every future sync, including the weekly `sync-forks` run.
+Earlier sync PRs were squash-merged for exactly this reason; the ancestry was restored afterward with a `git merge -s ours upstream/main` merge commit, which is the correct recovery if it ever happens again.
+
 ## The bootstrap scripts: never run them for real
 
 `setup/mac.sh` installs Nix (via the Determinate installer) and runs a real `nix-darwin` system activation (`darwin-rebuild switch` / `sudo nix run ... switch`); `setup/linux.sh` installs Nix and activates a real Home Manager profile; `setup/install.sh` ends in `exec` on one of the two. Never execute any of the three, the real Determinate installer, `darwin-rebuild switch`, `sudo nix run ...`, the Homebrew installer, or the nvm installer against a dev machine or CI host - these mutate the host permanently. All validation of them must go through the suites below, which run the actual scripts with `PATH` masked to stub executables so nothing real is ever installed or activated.
