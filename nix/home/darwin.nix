@@ -15,8 +15,14 @@ in
 
   home.homeDirectory = "/Users/shreejitverma";
 
+  # The flake reference is single-quoted inside the alias body on purpose.
+  # files/zsh/ic-workflow.zsh sets EXTENDED_GLOB, which makes `#` a repetition
+  # operator, so an unquoted <path>#mac is read as the pattern `ni` + `x#` +
+  # `mac`; it matches nothing and the alias dies with "no matches found" before
+  # darwin-rebuild is ever reached. Alias expansion is textual, so the quotes
+  # have to survive into the expanded command line.
   programs.zsh.shellAliases.rebuild =
-    "/run/current-system/sw/bin/darwin-rebuild switch --flake ${dotfilesDir}#mac";
+    "/run/current-system/sw/bin/darwin-rebuild switch --flake '${dotfilesDir}#mac'";
 
   # Weekly sync of forked tooling (~/github/*) with their upstream parents.
   # Runs Sundays at 10:00. The script merges upstream, pushes your fork, and

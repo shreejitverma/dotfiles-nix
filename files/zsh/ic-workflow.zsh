@@ -261,12 +261,22 @@ alias nshell='nix shell'
 # underneath differs. macOS builds a whole system generation through
 # nix-darwin, while Linux and WSL build the standalone Home Manager profile
 # resolved above -- the same one `rebuild` and `up` switch.
+#
+# The whole flake reference is quoted as one unit, not just the path. This file
+# sets EXTENDED_GLOB above, which makes `#` a repetition operator, so an
+# unquoted <path>#mac parses as the pattern `ni` + `x#` + `mac`, matches
+# nothing, and fails with "no matches found" the moment the alias is used.
+# ${(q)} over the assembled reference escapes the `#` along with the path.
 if [ "$IC_PLATFORM" = darwin ]; then
-  alias nbuild="darwin-rebuild build --flake ${(q)IC_DOTFILES}#mac"
+  _ic_flake_ref="${IC_DOTFILES}#mac"
+  alias nbuild="darwin-rebuild build --flake ${(q)_ic_flake_ref}"
   alias ngen='darwin-rebuild --list-generations'
+  unset _ic_flake_ref
 elif [ -n "$IC_HM_PROFILE" ]; then
-  alias nbuild="home-manager build --flake ${(q)IC_DOTFILES}#${(q)IC_HM_PROFILE}"
+  _ic_flake_ref="${IC_DOTFILES}#${IC_HM_PROFILE}"
+  alias nbuild="home-manager build --flake ${(q)_ic_flake_ref}"
   alias ngen='home-manager generations'
+  unset _ic_flake_ref
 fi
 
 # -----------------------------------------------------------------------------

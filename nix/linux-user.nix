@@ -18,8 +18,11 @@ in
     ./home/linux.nix
   ];
 
+  # Quoted for the same reason as the macOS alias in nix/home/darwin.nix:
+  # ic-workflow.zsh sets EXTENDED_GLOB, so an unquoted `#` in the flake
+  # reference is a glob operator and the alias fails before home-manager runs.
   programs.zsh.shellAliases.rebuild =
-    "home-manager switch --flake ${dotfilesDir}#${profileName}";
+    "home-manager switch --flake '${dotfilesDir}#${profileName}'";
 
   assertions = [
     {
