@@ -7,9 +7,11 @@
 # standalone Home Manager and manage the user environment only. The kernel,
 # services, display server, and distro packages stay with the distro.
 #
-# The weekly fork sync is a systemd user timer here, mirroring the launchd agent
+# The daily fork sync is a systemd user timer here, mirroring the launchd agent
 # in darwin.nix. WSL disables the timer in wsl.nix, because systemd is opt-in
-# there and off by default.
+# there and off by default. On a host without ~/github/.fleet/manifest.yaml the
+# script logs that there is nothing to sync and exits 0, so the timer is
+# harmless where the fleet is not set up.
 
 let
   dotfilesDir = config.ic.dotfilesDir;
@@ -50,9 +52,9 @@ in
   };
 
   systemd.user.timers.sync-forks = {
-    Unit.Description = "Weekly fork sync (Sundays 10:00)";
+    Unit.Description = "Daily fork sync (10:00)";
     Timer = {
-      OnCalendar = "Sun *-*-* 10:00:00";
+      OnCalendar = "*-*-* 10:00:00";
       Persistent = true;
     };
     Install.WantedBy = [ "timers.target" ];
