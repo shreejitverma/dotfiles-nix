@@ -24,19 +24,23 @@ in
   programs.zsh.shellAliases.rebuild =
     "/run/current-system/sw/bin/darwin-rebuild switch --flake '${dotfilesDir}#mac'";
 
-  # Weekly sync of forked tooling (~/github/*) with their upstream parents.
-  # Runs Sundays at 10:00. The script merges upstream, pushes your fork, and
-  # rebuilds the tools. Logs land in ~/Library/Logs/sync-forks*.log.
+  # Daily sync of forked tooling (~/github/*) with their upstream parents,
+  # driven by the fleet manifest (~/github/.fleet/manifest.yaml). Runs daily
+  # at 10:00; RunAtLoad picks up a run missed while the laptop was asleep or
+  # off. The script fast-forwards from upstream (never merges), pushes the
+  # fork, re-asserts commit identity, and reinstalls updated tools. Detailed
+  # logs land in ~/github/.fleet/logs/sync-YYYYMMDD.log (30-day rotation);
+  # the paths below only catch launchd-level stdout/stderr.
   launchd.agents.sync-forks = {
     enable = true;
     config = {
       ProgramArguments = [ "${dotfilesDir}/files/bin/sync-forks" ];
       StartCalendarInterval = [
-        { Weekday = 0; Hour = 10; Minute = 0; }
+        { Hour = 10; Minute = 0; }
       ];
-      StandardOutPath = "${config.home.homeDirectory}/Library/Logs/sync-forks.out.log";
-      StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/sync-forks.err.log";
-      RunAtLoad = false;
+      StandardOutPath = "${config.home.homeDirectory}/github/.fleet/logs/launchd.out.log";
+      StandardErrorPath = "${config.home.homeDirectory}/github/.fleet/logs/launchd.err.log";
+      RunAtLoad = true;
       ProcessType = "Background";
     };
   };
