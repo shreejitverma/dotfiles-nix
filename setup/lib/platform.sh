@@ -129,17 +129,6 @@ ic_profile_for() {
   echo "${user}@${suffix}"
 }
 
-# Where long-lived logs belong. macOS has ~/Library/Logs; Linux has no such
-# convention, so this follows the XDG state directory instead of inventing a
-# Library folder that nothing else on the system would look in.
-ic_log_dir() {
-  if [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
-    echo "$HOME/Library/Logs"
-  else
-    echo "${XDG_STATE_HOME:-$HOME/.local/state}"
-  fi
-}
-
 # Desktop notification, best effort. Never fails the caller: these run from
 # launchd and systemd timers where there may be no session to notify at all.
 ic_notify() {
