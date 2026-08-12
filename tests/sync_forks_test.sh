@@ -364,6 +364,68 @@ assert_grep "$LOG_G" 'ERROR: manifest exists but yielded 0 sync-eligible entries
 assert_grep "$HOME_G/notifications.log" 'sync-forks: manifest parse failure' "G: parse failure notification fired"
 
 # =============================================================================
+# Scenario group H: transient fetch failures are retried once after a pause.
+# november-flaky  1 behind, first fetch fails  -> retried, synced, no failure
+# oscar-down      1 behind, every fetch fails  -> failed after exactly 2 attempts
+# A PATH-leading git wrapper in this home fails `git fetch` while the repo's
+# countdown file is positive, then delegates to the real git; the stub sleep
+# records the requested pause and returns immediately so the retry is instant.
+# Expected notification: one "failures", naming oscar-down only.
+# =============================================================================
+echo "== scenario H: fetch retry =="
+HOME_H="$(new_home h)"
+make_fork november-flaky 1 0 "$HOME_H"
+make_fork oscar-down 1 0 "$HOME_H"
+REAL_GIT="$(command -v git)"
+mkdir -p "$HOME_H/fetch-fails"
+echo 1 >"$HOME_H/fetch-fails/november-flaky"
+echo 99 >"$HOME_H/fetch-fails/oscar-down"
+cat >"$HOME_H/.local/bin/git" <<EOF
+#!/bin/bash
+if [ "\$1" = fetch ]; then
+  cf="\$HOME/fetch-fails/\$(basename "\$PWD")"
+  if [ -f "\$cf" ] && [ "\$(cat "\$cf")" -gt 0 ]; then
+    n="\$(cat "\$cf")"
+    echo "\$((n - 1))" >"\$cf"
+    echo "simulated transient fetch failure" >&2
+    exit 128
+  fi
+fi
+exec "$REAL_GIT" "\$@"
+EOF
+cat >"$HOME_H/.local/bin/sleep" <<'EOF'
+#!/bin/bash
+printf 'sleep %s\n' "$*" >>"$HOME/sleep-calls.log"
+EOF
+chmod +x "$HOME_H/.local/bin/git" "$HOME_H/.local/bin/sleep"
+cat >"$HOME_H/github/.fleet/manifest.yaml" <<EOF
+- name: november-flaky
+  sync: true
+- name: oscar-down
+  sync: true
+EOF
+OSCAR_BEFORE="$(sha "$HOME_H/github/oscar-down")"
+
+run_sync "$HOME_H" >"$SANDBOX/run-h.out" 2>&1
+assert_eq "$?" 0 "H: sync-forks exits 0"
+LOG_H="$HOME_H/github/.fleet/logs/sync-$TODAY.log"
+assert_grep "$LOG_H" '\[november-flaky\] fetch failed, retrying in 30s' "H: transient failure logs the retry"
+assert_grep "$LOG_H" '\[november-flaky\] fast-forwarded 1 commit' "H: flaky repo fast-forwarded after the retry"
+assert_eq "$(sha "$HOME_H/github/november-flaky")" "$(sha "$REMOTES/november-flaky-up.git")" "H: flaky repo local main at upstream head"
+assert_eq "$(sha "$REMOTES/november-flaky-or.git")" "$(sha "$REMOTES/november-flaky-up.git")" "H: flaky repo fork origin pushed"
+assert_grep "$HOME_H/sleep-calls.log" '^sleep 30$' "H: retry pauses via sleep 30"
+assert_eq "$(wc -l <"$HOME_H/sleep-calls.log" | tr -d ' ')" 2 "H: exactly one pause per failing repo"
+assert_grep "$LOG_H" '\[oscar-down\] fetch failed twice' "H: persistent failure logged after the retry"
+assert_eq "$(cat "$HOME_H/fetch-fails/oscar-down")" 97 "H: persistent failure got exactly two fetch attempts"
+assert_eq "$(sha "$HOME_H/github/oscar-down")" "$OSCAR_BEFORE" "H: persistently failing repo left untouched"
+assert_grep "$LOG_H" 'synced:\[ november-flaky \]' "H: recovered repo counted as synced"
+assert_grep "$LOG_H" 'failed:\[ oscar-down \]' "H: persistent failure counted as failed"
+assert_eq "$(wc -l <"$HOME_H/notifications.log" | tr -d ' ')" 1 "H: exactly one notification"
+assert_grep "$HOME_H/notifications.log" 'sync-forks: failures' "H: failure notification fired"
+assert_grep "$HOME_H/notifications.log" 'oscar-down' "H: failure notification names the persistent repo"
+assert_not_grep "$HOME_H/notifications.log" 'november-flaky' "H: recovered repo not reported as failed"
+
+# =============================================================================
 # Scenario group F: ic-workflow.zsh sources the generated fleet aliases.
 # =============================================================================
 echo "== scenario F: fleet aliases hook =="

@@ -166,7 +166,14 @@ while IFS='|' read -r r branch install; do
 
   assert_identity "$r" || { failed="$failed $r"; continue; }
 
-  git fetch --quiet --all --prune 2>>"$LOG" || { log "[$r] fetch failed"; failed="$failed $r"; continue; }
+  # One retry after a pause: the first scheduled run showed transient fetch
+  # hangs/failures under load; a repo left un-synced for a day over a network
+  # blip is not worth a failure notification.
+  if ! git fetch --quiet --all --prune 2>>"$LOG"; then
+    log "[$r] fetch failed, retrying in 30s"
+    sleep 30
+    git fetch --quiet --all --prune 2>>"$LOG" || { log "[$r] fetch failed twice"; failed="$failed $r"; continue; }
+  fi
 
   # A manifest entry whose clone lacks the upstream remote (or names a branch
   # that does not exist there) must not read as "already up to date": with no

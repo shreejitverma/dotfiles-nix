@@ -57,7 +57,12 @@ in
       StandardOutPath = "${config.home.homeDirectory}/github/.fleet/logs/launchd.out.log";
       StandardErrorPath = "${config.home.homeDirectory}/github/.fleet/logs/launchd.err.log";
       RunAtLoad = true;
-      ProcessType = "Background";
+      # Standard, not Background: launchd throttles Background jobs' CPU and
+      # I/O so hard that the first scheduled daily run took 3.5 hours (a make
+      # install crawled for 75 minutes, a pnpm build for 87) and two fetches
+      # hung ~17 minutes before failing. The sync does real builds; it needs
+      # normal QoS.
+      ProcessType = "Standard";
     };
   };
 }
