@@ -75,6 +75,9 @@ Update values like:
 `yourname` also appears as the `username` literal in `flake.nix`, which is what names the `homeConfigurations` outputs.
 The bootstrap reads that literal to derive the profile it activates, so replacing it there is enough; nothing else restates it.
 
+On macOS the git config also signs commits by default with an SSH key at `~/.ssh/id_ed25519_signing`.
+Generate that key before your first commit (see Step 1 of the full setup below), or remove `programs.git.signing.signByDefault` from `nix/home/darwin.nix` if you do not want signed commits.
+
 If you are on an Intel Mac, change the system target in `flake.nix` from:
 
 ```nix
@@ -261,10 +264,10 @@ upstream -> https://github.com/kunchenguid/<repo>.git
 This is what makes local commits safe: the sync is fast-forward-only, so a fork with its own commits (like wheelhouse's `Configure fleet for shreejitverma`) is reported as diverged and left untouched rather than merged or clobbered.
 
 **2. Binaries.**
-Go tools are built with `make` and installed to `~/.local/bin`:
+Go tools are built with `make` and installed to `~/go/bin` (`$(go env GOPATH)/bin`, on `PATH` via `nix/home/common.nix`):
 
-- `no-mistakes` from `~/github/no-mistakes` (`make build`, binary at `bin/no-mistakes`)
-- `treehouse` from `~/github/treehouse` (`make build`, binary at `./treehouse`)
+- `no-mistakes` from `~/github/no-mistakes` (`make install`, which also restarts its daemon)
+- `treehouse` from `~/github/treehouse` (`make build` plus an explicit `install` into `~/go/bin`; the exact command lives in the fleet manifest)
 
 Node tools are built with `pnpm` and put on `PATH` with `npm link`, so the linked binary in `/opt/homebrew/bin` always runs the current build of the clone:
 
@@ -338,7 +341,7 @@ This is the full map; if something is installed and not listed here, it is unman
 | Manual Homebrew | `brew` (not yet declared in nix) | formulas `node`, `go`, `gh`; casks `google-chrome` (required by chrome-devtools-axi), `codex` |
 | npm globals | `npm install -g` | `pnpm` (build tool for all Node forks) |
 | Native installers | vendor scripts | `claude` (Claude Code, `curl -fsSL https://claude.ai/install.sh \| bash`) |
-| Go builds | `sync-forks` / manual | `no-mistakes`, `treehouse` into `~/.local/bin` |
+| Go builds | `sync-forks` / manual | `no-mistakes`, `treehouse` into `~/go/bin` |
 | npm links | `sync-forks` / manual | `chrome-devtools-axi`, `gh-axi`, `gnhf`, `lavish-axi`, `quota-axi`, `tasks-axi` |
 | Skills installer | `npx skills` | third-party skills: `deploy-to-vercel`, `find-skills`, `vercel-*`, `web-design-guidelines`, `writing-guidelines` |
 | Symlink farm | `ic-link` | all skill, instruction-chain, and personal-layer links |
@@ -380,16 +383,22 @@ curl -fsSL https://claude.ai/install.sh | bash   # Claude Code -> ~/.local/bin/c
 brew install --cask codex                        # Codex CLI
 ```
 
-**Step 1: authenticate GitHub.**
+**Step 1: authenticate GitHub and create the commit-signing key.**
 
 ```bash
 gh auth login
+ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519_signing        # dedicated signing key the git config points at
+gh ssh-key add ~/.ssh/id_ed25519_signing.pub --type signing     # Verified badge on GitHub; needs the admin:ssh_signing_key scope
 ```
+
+The git config in `nix/home/common.nix` signs commits with this key over SSH, and `nix/home/darwin.nix` turns signing on by default on macOS only, because the key is machine-local.
+The key is deliberately passphrase-less so headless commits sign without an agent prompt.
+Local verification (`git log --show-signature`) additionally needs the key listed in the allowed-signers file at `~/github/.fleet/allowed_signers`, which lives with the fleet manifest outside this repo.
 
 **Step 2: fork and clone every tool with an upstream remote.**
 
 ```bash
-mkdir -p ~/github ~/.local/bin ~/.agents/skills ~/.claude/skills
+mkdir -p ~/github ~/.local/bin ~/go/bin ~/.agents/skills ~/.claude/skills
 cd ~/github
 me=$(gh api user -q .login)
 for repo in axi chrome-devtools-axi firstmate gh-axi gnhf lavish-axi \
@@ -401,12 +410,14 @@ for repo in axi chrome-devtools-axi firstmate gh-axi gnhf lavish-axi \
 done
 ```
 
-**Step 3: build the Go tools into `~/.local/bin`.**
+**Step 3: build the Go tools into `~/go/bin`.**
 
 ```bash
-cd ~/github/no-mistakes && make build && install -m755 bin/no-mistakes ~/.local/bin/no-mistakes
-cd ~/github/treehouse   && make build && install -m755 treehouse       ~/.local/bin/treehouse
+cd ~/github/no-mistakes && make install   # installs to $(go env GOPATH)/bin and restarts the daemon
+cd ~/github/treehouse   && make build && install -m755 treehouse ~/go/bin/treehouse
 ```
+
+treehouse gets an explicit `install` because its upstream `make install` reads the environment `GOPATH`, which is unset under launchd where `sync-forks` re-runs these commands.
 
 **Step 4: build and link the Node tools.**
 
@@ -495,7 +506,7 @@ A healthy system ends with `ic-doctor: all checks passed`.
 The checklist when adopting the next tool, so it inherits all five layers:
 
 1. Fork, clone, and set the `upstream` remote (Step 2 pattern).
-2. Build and put it on `PATH`: `pnpm install --frozen-lockfile && pnpm run build && npm link` for Node tools, or `make build && install -m755 <bin> ~/.local/bin/<bin>` for Go tools.
+2. Build and put it on `PATH`: `pnpm install --frozen-lockfile && pnpm run build && npm link` for Node tools, or `make build && install -m755 <bin> ~/go/bin/<bin>` for Go tools.
 3. Add its skill to `files/bin/ic-link` (both the canonical link and the `ALL_SKILLS` mirror list) and run `ic-link`.
 4. Add the repo to the fleet manifest (`~/github/.fleet/manifest.yaml`), with its default branch and install command, so the daily sync picks it up.
 5. Add it to the `FORKS`, `BINARIES`, and `SKILLS` lists in `files/bin/ic-doctor`.
