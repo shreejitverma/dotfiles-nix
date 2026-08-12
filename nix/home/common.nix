@@ -68,11 +68,12 @@ in
     # SSH commit signing with a dedicated passphrase-less key. The public half
     # must also be registered on GitHub as a signing key (gh ssh-key add
     # --type signing) for the Verified badge; the allowed-signers file makes
-    # git log --show-signature verify locally.
+    # git log --show-signature verify locally. Format and key are harmless
+    # where the key is absent; signByDefault lives in darwin.nix because the
+    # key exists only on the Mac.
     signing = {
       format = "ssh";
       key = "~/.ssh/id_ed25519_signing.pub";
-      signByDefault = true;
     };
     # Defense-in-depth identity for repos under ~/github, with a known limit:
     # git reads ~/.gitconfig after this generated file, and an includeIf is
