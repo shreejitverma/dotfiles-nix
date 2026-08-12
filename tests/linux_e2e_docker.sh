@@ -97,7 +97,7 @@ out=$(run_profile linux)
 assert_in "$out" "INSTALL_OK" "linux: install completes"
 assert_in "$out" "REBUILD_ALIAS alias -- rebuild='home-manager switch" "linux: rebuild drives home-manager, not darwin-rebuild"
 assert_in "$out" "@linux" "linux: rebuild alias names a linux profile"
-assert_in "$out" "TIMER_ENABLED" "linux: the weekly sync timer is enabled"
+assert_in "$out" "TIMER_ENABLED" "linux: the daily sync timer is enabled"
 assert_in "$out" "DESKTOP_YES" "linux: the desktop layer is present"
 assert_in "$out" "NO_WSL_ALIASES" "linux: WSL interop aliases are absent"
 assert_in "$out" "BASH_PATH_OK" "linux: a bash login gets files/bin on PATH"

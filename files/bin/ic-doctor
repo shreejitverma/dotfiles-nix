@@ -6,8 +6,8 @@
 #   2. forks under ~/github (clone, upstream remote, branch, cleanliness)
 #   3. binaries on PATH with working --version
 #   4. agent skill symlinks (~/.agents/skills and ~/.claude/skills)
-#   5. the weekly sync-forks schedule (launchd agent on macOS, systemd user
-#      timer on Linux) and its last log line
+#   5. the daily sync-forks schedule (launchd agent on macOS, systemd user
+#      timer on Linux) and the newest fleet sync log
 #   6. auth (gh, quota-axi keychain access)
 #   7. cross-tool defaults (~/AGENTS.md chain, codex AGENTS.md and skills)
 #
@@ -15,9 +15,10 @@
 # warns are informational and do not affect the exit code.
 set -uo pipefail
 
-# Platform differences (PATH, log location, scheduler) live in one place, shared
-# with the installer and sync-forks. Derived from this script's own location, so
-# ic-doctor reports on the checkout it was invoked from.
+# Platform differences (PATH, platform detection, the literal parsers) live in
+# one place, shared with the installer and sync-forks. Derived from this
+# script's own location, so ic-doctor reports on the checkout it was invoked
+# from.
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=../../setup/lib/platform.sh
 . "$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)/setup/lib/platform.sh"
@@ -26,6 +27,8 @@ PATH="$(ic_default_path)"
 export PATH
 
 GH_ROOT="$HOME/github"
+FLEET_DIR="$GH_ROOT/.fleet"
+MANIFEST="$FLEET_DIR/manifest.yaml"
 FORKS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi wheelhouse quota-axi"
 BINARIES="no-mistakes treehouse gnhf lavish-axi chrome-devtools-axi gh-axi tasks-axi quota-axi"
 SKILLS="axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi ship stow tasks-axi"
@@ -92,6 +95,21 @@ else
 fi
 
 echo "[2/7] forks under $GH_ROOT"
+# The branch a fork is expected to sit on comes from the fleet manifest's
+# default_branch, the same field sync-forks reads. Falls back to main when the
+# manifest is absent or has no entry for the repo (matching sync-forks'
+# parser default).
+fork_default_branch() { # repo
+  local b=""
+  if [ -f "$MANIFEST" ]; then
+    b=$(awk -v want="$1" '
+      /^- name:/           { if (name == want) exit; name = $3; branch = "main" }
+      /^  default_branch:/ { branch = $2 }
+      END                  { if (name == want) print branch }
+    ' "$MANIFEST" 2>/dev/null)
+  fi
+  printf '%s\n' "${b:-main}"
+}
 for r in $FORKS; do
   d="$GH_ROOT/$r"
   if [ ! -d "$d/.git" ]; then bad "$r: clone missing"; continue; fi
@@ -99,10 +117,11 @@ for r in $FORKS; do
     bad "$r: no upstream remote"; continue
   fi
   branch=$(git -C "$d" rev-parse --abbrev-ref HEAD 2>/dev/null)
+  expected=$(fork_default_branch "$r")
   if [ -n "$(git -C "$d" status --porcelain 2>/dev/null | head -1)" ]; then
     warn "$r: uncommitted changes (sync-forks will skip it)"
-  elif [ "$branch" != "main" ]; then
-    warn "$r: on branch $branch, not main (sync-forks will skip it)"
+  elif [ "$branch" != "$expected" ]; then
+    warn "$r: on branch $branch, not $expected (sync-forks will skip it)"
   else
     ok "$r"
   fi
@@ -130,38 +149,47 @@ for s in $SKILLS; do
   if [ -n "$missing" ]; then bad "$s: missing or broken symlink:$missing"; else ok "$s"; fi
 done
 
-echo "[5/7] weekly sync"
+echo "[5/7] daily sync"
 # macOS schedules this with a launchd agent; Linux with a systemd user timer.
-# WSL deliberately ships the timer disabled, because systemd is off by default
-# there, so a missing timer is reported as a warning rather than a failure.
+# Both run daily at 10:00 and catch up on runs missed while the machine was
+# off (RunAtLoad / Persistent). WSL deliberately ships the timer disabled,
+# because systemd is off by default there, so a missing timer is reported as
+# a warning rather than a failure.
 case "$TARGET" in
   darwin)
     if launchctl list 2>/dev/null | grep -q "sync-forks"; then
-      ok "launchd agent loaded (Sundays 10:00)"
+      ok "launchd agent loaded (daily 10:00)"
     else
       bad "launchd agent not loaded (run: rebuild)"
     fi
     ;;
   wsl)
     if systemctl --user is-enabled sync-forks.timer >/dev/null 2>&1; then
-      ok "systemd user timer enabled (Sundays 10:00)"
+      ok "systemd user timer enabled (daily 10:00)"
     else
       warn "systemd timer not enabled (expected on WSL; run 'syncforks' by hand)"
     fi
     ;;
   *)
     if systemctl --user is-enabled sync-forks.timer >/dev/null 2>&1; then
-      ok "systemd user timer enabled (Sundays 10:00)"
+      ok "systemd user timer enabled (daily 10:00)"
     else
       bad "systemd user timer not enabled (run: rebuild)"
     fi
     ;;
 esac
-LOG="$(ic_log_dir)/sync-forks.log"
-if [ -f "$LOG" ]; then
-  ok "last log: $(tail -1 "$LOG")"
+# sync-forks writes dated logs to ~/github/.fleet/logs (30-day rotation). The
+# .fleet directory is bootstrapped outside this repo, so its absence means the
+# fleet is simply not set up on this host: a warn, not a failure.
+if [ -d "$FLEET_DIR" ]; then
+  latest=$(find "$FLEET_DIR/logs" -name 'sync-*.log' 2>/dev/null | sort | tail -1)
+  if [ -n "$latest" ]; then
+    ok "last log ($(basename "$latest")): $(tail -1 "$latest")"
+  else
+    warn "no sync log yet in $FLEET_DIR/logs (runs daily at 10:00, or run: syncforks)"
+  fi
 else
-  warn "no sync log yet at $LOG (runs Sundays, or run: syncforks)"
+  warn "fleet not set up ($FLEET_DIR absent); sync-forks exits with nothing to sync"
 fi
 
 echo "[6/7] auth"

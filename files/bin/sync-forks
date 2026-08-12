@@ -23,8 +23,8 @@
 # and notifies only on failure. Run with --dry-run to only report drift.
 set -uo pipefail
 
-# Platform differences (PATH, log location, notifications) live in one place,
-# shared with the installer and ic-doctor. Derived from this script's own
+# Platform differences (PATH, notifications) live in one place, shared with
+# the installer and ic-doctor. Derived from this script's own
 # location so it resolves under launchd and systemd alike.
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=../../setup/lib/platform.sh
