@@ -24,6 +24,12 @@ in
   programs.zsh.shellAliases.rebuild =
     "/run/current-system/sw/bin/darwin-rebuild switch --flake '${dotfilesDir}#mac'";
 
+  # Enforce signing only here: the signing key (~/.ssh/id_ed25519_signing,
+  # generated manually on this Mac and registered on GitHub) is machine-local,
+  # so Linux/WSL activations inherit the format and key from common.nix but
+  # never force signing with a key that does not exist there.
+  programs.git.signing.signByDefault = true;
+
   # Daily sync of forked tooling (~/github/*) with their upstream parents,
   # driven by the fleet manifest (~/github/.fleet/manifest.yaml). Runs daily
   # at 10:00; RunAtLoad picks up a run missed while the laptop was asleep or
