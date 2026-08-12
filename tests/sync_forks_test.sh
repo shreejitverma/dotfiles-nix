@@ -129,6 +129,7 @@ TODAY="$(date +%Y%m%d)"
 # echo-branch       1 behind, on feature branch -> skipped
 # foxtrot-nosync    sync: false                 -> never mentioned
 # golf-missing      in manifest, not cloned     -> skipped
+# mike-ahead        2 ahead, 0 behind           -> reported, never published
 # Expected notification: exactly one, "diverged" (no failures).
 # =============================================================================
 echo "== scenario A: manifest-driven sync run =="
@@ -143,6 +144,7 @@ echo dirty >>"$HOME_A/github/delta-dirty/f.txt"
 make_fork echo-branch 1 0 "$HOME_A"
 git -C "$HOME_A/github/echo-branch" checkout -q -b feature
 make_fork foxtrot-nosync 1 0 "$HOME_A"
+make_fork mike-ahead 0 2 "$HOME_A"
 
 cat >"$HOME_A/github/.fleet/manifest.yaml" <<EOF
 fleet:
@@ -165,6 +167,8 @@ repos:
   sync: false
 - name: golf-missing
   sync: true
+- name: mike-ahead
+  sync: true
 EOF
 
 # Log rotation fixtures: a 40-day-old daily log must be deleted, a fresh one kept.
@@ -177,6 +181,8 @@ CHARLIE_BEFORE="$(sha "$HOME_A/github/charlie-diverged")"
 CHARLIE_ORIGIN_BEFORE="$(sha "$REMOTES/charlie-diverged-or.git")"
 DELTA_BEFORE="$(sha "$HOME_A/github/delta-dirty")"
 FOX_ORIGIN_BEFORE="$(sha "$REMOTES/foxtrot-nosync-or.git")"
+MIKE_BEFORE="$(sha "$HOME_A/github/mike-ahead")"
+MIKE_ORIGIN_BEFORE="$(sha "$REMOTES/mike-ahead-or.git")"
 
 run_sync "$HOME_A" >"$SANDBOX/run-a.out" 2>&1
 assert_eq "$?" 0 "A: sync-forks exits 0"
@@ -225,13 +231,23 @@ assert_not_grep "$LOG_A" 'foxtrot-nosync' "A: sync:false repo never mentioned"
 assert_eq "$(sha "$REMOTES/foxtrot-nosync-or.git")" "$FOX_ORIGIN_BEFORE" "A: sync:false fork origin untouched"
 assert_grep "$LOG_A" '\[golf-missing\] not cloned, skip' "A: uncloned repo skipped"
 
+# mike: ahead-only -> reported, never auto-published to the fork origin.
+assert_grep "$LOG_A" '\[mike-ahead\] ahead-only: 2 unpushed local commit(s), not publishing' "A: ahead-only fork reported"
+assert_eq "$(sha "$HOME_A/github/mike-ahead")" "$MIKE_BEFORE" "A: ahead-only local branch untouched"
+assert_eq "$(sha "$REMOTES/mike-ahead-or.git")" "$MIKE_ORIGIN_BEFORE" "A: ahead-only fork origin NOT pushed"
+
+# Parsed sync-eligible entry count is logged.
+assert_grep "$LOG_A" 'manifest: 7 sync-eligible entries' "A: parsed manifest entry count logged"
+
 # gh repo sync: pinned to the branch, only for forks with no local-only commits.
 assert_grep "$HOME_A/gh-calls.log" '^gh repo sync shreejitverma/alpha-behind -b main$' "A: gh repo sync called for alpha"
 assert_grep "$HOME_A/gh-calls.log" '^gh repo sync shreejitverma/bravo-uptodate -b main$' "A: gh repo sync called for bravo"
 assert_not_grep "$HOME_A/gh-calls.log" 'charlie-diverged' "A: gh repo sync NOT called for diverged fork"
+assert_not_grep "$HOME_A/gh-calls.log" 'mike-ahead' "A: gh repo sync NOT called for ahead-only fork"
 
 # Summary and notification: diverged only -> one "diverged forks" notification.
 assert_grep "$LOG_A" 'synced:\[ alpha-behind bravo-uptodate \]' "A: summary lists synced repos"
+assert_grep "$LOG_A" 'skipped:\[ delta-dirty echo-branch golf-missing mike-ahead \]' "A: summary counts ahead-only fork as skipped"
 assert_grep "$LOG_A" 'failed:\[ \]' "A: summary shows no failures"
 assert_eq "$(wc -l <"$HOME_A/notifications.log" | tr -d ' ')" 1 "A: exactly one notification"
 assert_grep "$HOME_A/notifications.log" 'sync-forks: diverged forks' "A: diverged notification fired"
@@ -276,11 +292,14 @@ assert_grep "$SANDBOX/run-c.out" 'no fleet manifest at .* nothing to sync' "C: s
 assert_no_file "$HOME_C/notifications.log" "C: no notification without a manifest"
 
 # =============================================================================
-# Scenario group D: --dry-run reports drift and mutates nothing.
+# Scenario group D: --dry-run reports drift, mutates nothing, never notifies.
+# A local identity override that a real run would strip must not fail the repo:
+# the dry run evaluates identity as if the override were already removed.
 # =============================================================================
 echo "== scenario D: dry run =="
 HOME_D="$(new_home d)"
 make_fork juliet-behind 2 0 "$HOME_D"
+git -C "$HOME_D/github/juliet-behind" config user.email stale@university.edu
 cat >"$HOME_D/github/.fleet/manifest.yaml" <<EOF
 - name: juliet-behind
   sync: true
@@ -292,11 +311,15 @@ JULIET_ORIGIN_BEFORE="$(sha "$REMOTES/juliet-behind-or.git")"
 run_sync "$HOME_D" --dry-run >"$SANDBOX/run-d.out" 2>&1
 assert_eq "$?" 0 "D: dry run exits 0"
 LOG_D="$HOME_D/github/.fleet/logs/sync-$TODAY.log"
+assert_grep "$LOG_D" '\[juliet-behind\] removing local user.email override (stale@university.edu)' "D: dry run reports the local override"
+assert_not_grep "$LOG_D" '\[juliet-behind\] ERROR: author identity' "D: dry run evaluates identity as if the override were stripped"
+assert_eq "$(git -C "$HOME_D/github/juliet-behind" config --local user.email)" "stale@university.edu" "D: dry run leaves the local override in place"
 assert_grep "$LOG_D" '\[juliet-behind\] behind=2 ahead=0' "D: dry run reports drift"
 assert_eq "$(sha "$HOME_D/github/juliet-behind")" "$JULIET_BEFORE" "D: dry run leaves local branch untouched"
 assert_eq "$(sha "$REMOTES/juliet-behind-or.git")" "$JULIET_ORIGIN_BEFORE" "D: dry run leaves fork origin untouched"
 assert_no_file "$HOME_D/juliet-installed" "D: dry run does not reinstall"
 assert_no_file "$HOME_D/gh-calls.log" "D: dry run never calls gh"
+assert_no_file "$HOME_D/notifications.log" "D: dry run never notifies"
 
 # =============================================================================
 # Scenario group E: a stray global identity (stale email) fails the repo
@@ -320,6 +343,25 @@ assert_grep "$LOG_E" '\[kilo-behind\] ERROR: author identity does not resolve to
 assert_eq "$(sha "$HOME_E/github/kilo-behind")" "$KILO_BEFORE" "E: repo left untouched on identity failure"
 assert_eq "$(sha "$REMOTES/kilo-behind-or.git")" "$KILO_ORIGIN_BEFORE" "E: fork origin untouched on identity failure"
 assert_grep "$HOME_E/notifications.log" 'sync-forks: failures' "E: failure notification fired"
+
+# =============================================================================
+# Scenario group G: manifest format drift (indented list items) parses to zero
+# sync-eligible entries -> hard failure with a notification, not a silent
+# all-clear that would let the fleet stop syncing unnoticed.
+# =============================================================================
+echo "== scenario G: manifest format drift =="
+HOME_G="$(new_home g)"
+cat >"$HOME_G/github/.fleet/manifest.yaml" <<EOF
+repos:
+  - name: lima-indented
+    sync: true
+EOF
+run_sync "$HOME_G" >"$SANDBOX/run-g.out" 2>&1
+assert_eq "$?" 1 "G: zero parsed entries exits non-zero"
+LOG_G="$HOME_G/github/.fleet/logs/sync-$TODAY.log"
+assert_grep "$LOG_G" 'manifest: 0 sync-eligible entries' "G: zero entry count logged"
+assert_grep "$LOG_G" 'ERROR: manifest exists but yielded 0 sync-eligible entries' "G: format drift logged as an error"
+assert_grep "$HOME_G/notifications.log" 'sync-forks: manifest parse failure' "G: parse failure notification fired"
 
 # =============================================================================
 # Scenario group F: ic-workflow.zsh sources the generated fleet aliases.

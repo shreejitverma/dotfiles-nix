@@ -6,14 +6,15 @@
 #   1. re-asserts commit identity (strips any local user.email/user.name
 #      override; a wrong resolved identity fails the repo),
 #   2. fetches all remotes and computes divergence against upstream (a fork
-#      whose branch has local commits is reported as DIVERGED and left
-#      untouched - never merged, never rebased, and its GitHub remote is
-#      never moved either),
+#      whose branch has local commits is left untouched - never merged, never
+#      rebased, and its GitHub remote is never moved either: behind as well
+#      is reported as DIVERGED, ahead-only is reported and never published),
 #   3. only when the fork has no local-only commits, asks GitHub to
 #      fast-forward the fork's default branch from upstream (gh repo sync -b:
 #      server-side, cheap, refuses non-fast-forwards),
 #   4. fast-forwards the local default branch from upstream (--ff-only),
-#   5. pushes the updated default branch to the fork (normal push only),
+#   5. pushes the default branch to the fork only after an actual
+#      fast-forward (normal push only),
 #   6. re-runs the repo's install command from the manifest when it updated,
 #      so npm-linked CLIs and ~/.local/bin binaries stay current.
 #
@@ -84,8 +85,17 @@ manifest_entries() {
 # stray ~/.gitconfig, which git reads after the nix-managed file) is winning,
 # which this script must not edit - it fails the repo so the failure
 # notification fires instead of the wrong identity passing silently.
+#
+# A dry run must not mutate, so it cannot unset the local override before
+# checking; it instead resolves the identity from the non-local config scopes,
+# i.e. what a real run would see after stripping the override.
+ident_without_local() { # key
+  git config --show-scope --get-all "$1" 2>/dev/null \
+    | awk -F'\t' '$1 != "local" && $1 != "worktree" { v = $2 } END { print v }'
+}
+
 assert_identity() {
-  local r="$1"
+  local r="$1" ident
   if git config --local user.email >/dev/null 2>&1; then
     log "[$r] removing local user.email override ($(git config --local user.email))"
     [ "$DRY" -eq 0 ] && git config --local --unset user.email
@@ -94,7 +104,12 @@ assert_identity() {
     log "[$r] removing local user.name override"
     [ "$DRY" -eq 0 ] && git config --local --unset user.name
   fi
-  case "$(git var GIT_AUTHOR_IDENT 2>/dev/null)" in
+  if [ "$DRY" -eq 1 ]; then
+    ident="$(ident_without_local user.name) <$(ident_without_local user.email)>"
+  else
+    ident="$(git var GIT_AUTHOR_IDENT 2>/dev/null)"
+  fi
+  case "$ident" in
     "$IDENT_NAME <$IDENT_EMAIL>"*) : ;;
     *)
       log "[$r] ERROR: author identity does not resolve to $IDENT_EMAIL (check ~/.gitconfig)"
@@ -106,6 +121,22 @@ assert_identity() {
 synced="" diverged="" skipped="" failed=""
 
 log "===== sync-forks start (dry-run=$DRY, manifest=$MANIFEST) ====="
+
+# The line-oriented parser above matches an exact format; if the externally
+# owned manifest ever drifts (say, to indented list items), it would silently
+# yield zero entries and the fleet would stop syncing with no signal. Log the
+# parsed count and treat zero entries from an existing manifest as a failure.
+entries="$(manifest_entries)"
+entry_count=0
+[ -n "$entries" ] && entry_count="$(printf '%s\n' "$entries" | wc -l | tr -d ' ')"
+entry_word="entries"
+[ "$entry_count" -eq 1 ] && entry_word="entry"
+log "manifest: $entry_count sync-eligible $entry_word"
+if [ "$entry_count" -eq 0 ]; then
+  log "ERROR: manifest exists but yielded 0 sync-eligible entries (format drift?)"
+  [ "$DRY" -eq 0 ] && notify "sync-forks: manifest parse failure" "0 sync-eligible entries parsed from $MANIFEST"
+  exit 1
+fi
 
 while IFS='|' read -r r branch install; do
   d="$GH_ROOT/$r"
@@ -165,31 +196,42 @@ while IFS='|' read -r r branch install; do
       || log "[$r] server-side fork sync skipped (offline or API error)"
   fi
 
+  # Local-only commits are never auto-published: behind as well means the fork
+  # has truly diverged; ahead-only means unpushed local work on the default
+  # branch, which stays local until a human pushes it. The push below happens
+  # only after an actual fast-forward.
+  if [ "$behind" -gt 0 ] && [ "$ahead" -gt 0 ]; then
+    log "[$r] DIVERGED: $ahead local, $behind upstream commit(s) -> left untouched, resolve manually"
+    diverged="$diverged $r"
+    continue
+  fi
+  if [ "$ahead" -gt 0 ]; then
+    log "[$r] ahead-only: $ahead unpushed local commit(s), not publishing"
+    skipped="$skipped $r"
+    continue
+  fi
+  if [ "$behind" -eq 0 ]; then
+    log "[$r] already up to date with upstream"
+    synced="$synced $r"
+    continue
+  fi
+
   repo_ok=1
-  if [ "$behind" -gt 0 ]; then
-    if [ "$ahead" -gt 0 ]; then
-      log "[$r] DIVERGED: $ahead local, $behind upstream commit(s) -> left untouched, resolve manually"
-      diverged="$diverged $r"
-      continue
-    fi
-    if git merge --ff-only "upstream/$branch" >>"$LOG" 2>&1; then
-      log "[$r] fast-forwarded $behind commit(s)"
-      if [ -n "$install" ] && [ "$install" != "none" ]; then
-        if ( cd "$d" && eval "$install" </dev/null >>"$LOG" 2>&1 ); then
-          log "[$r] reinstalled ($install)"
-        else
-          log "[$r] reinstall FAILED ($install)"
-          failed="$failed $r"
-          repo_ok=0
-        fi
+  if git merge --ff-only "upstream/$branch" >>"$LOG" 2>&1; then
+    log "[$r] fast-forwarded $behind commit(s)"
+    if [ -n "$install" ] && [ "$install" != "none" ]; then
+      if ( cd "$d" && eval "$install" </dev/null >>"$LOG" 2>&1 ); then
+        log "[$r] reinstalled ($install)"
+      else
+        log "[$r] reinstall FAILED ($install)"
+        failed="$failed $r"
+        repo_ok=0
       fi
-    else
-      log "[$r] ff-only merge unexpectedly failed -> left untouched"
-      failed="$failed $r"
-      continue
     fi
   else
-    log "[$r] already up to date with upstream"
+    log "[$r] ff-only merge unexpectedly failed -> left untouched"
+    failed="$failed $r"
+    continue
   fi
 
   if git push -q origin "$branch" 2>>"$LOG"; then
@@ -198,14 +240,16 @@ while IFS='|' read -r r branch install; do
     log "[$r] push to origin FAILED (auth/network?)"
     failed="$failed $r"
   fi
-done < <(manifest_entries)
+done < <(printf '%s\n' "$entries")
 
 log "===== done. synced:[$synced ] diverged:[$diverged ] skipped:[$skipped ] failed:[$failed ] ====="
 
 # Notify on failure only: diverged forks and hard failures need a human;
-# a quiet success needs nothing.
-if [ -n "$failed" ]; then
-  notify "sync-forks: failures" "Failed:$failed"
-elif [ -n "$diverged" ]; then
-  notify "sync-forks: diverged forks" "Manual reconcile needed:$diverged"
+# a quiet success needs nothing. A dry run is report-only and never notifies.
+if [ "$DRY" -eq 0 ]; then
+  if [ -n "$failed" ]; then
+    notify "sync-forks: failures" "Failed:$failed"
+  elif [ -n "$diverged" ]; then
+    notify "sync-forks: diverged forks" "Manual reconcile needed:$diverged"
+  fi
 fi

@@ -1,4 +1,4 @@
-{ config, ... }:
+{ config, lib, ... }:
 
 # macOS-only Home Manager layer: the launchd agent, the macOS home directory,
 # and the `rebuild` alias that drives nix-darwin.
@@ -31,6 +31,16 @@ in
   # fork, re-asserts commit identity, and reinstalls updated tools. Detailed
   # logs land in ~/github/.fleet/logs/sync-YYYYMMDD.log (30-day rotation);
   # the paths below only catch launchd-level stdout/stderr.
+  #
+  # launchd does not create intermediate directories for StandardOutPath /
+  # StandardErrorPath, and RunAtLoad fires at activation - before the external
+  # fleet bootstrap has ever run on a fresh machine. The activation step below
+  # guarantees the directory exists so the agent can always spawn and reach the
+  # script's graceful no-manifest exit.
+  home.activation.fleetLogDir = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    run mkdir -p "${config.home.homeDirectory}/github/.fleet/logs"
+  '';
+
   launchd.agents.sync-forks = {
     enable = true;
     config = {
