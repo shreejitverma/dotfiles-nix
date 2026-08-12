@@ -129,17 +129,6 @@ ic_profile_for() {
   echo "${user}@${suffix}"
 }
 
-# Where long-lived logs belong. macOS has ~/Library/Logs; Linux has no such
-# convention, so this follows the XDG state directory instead of inventing a
-# Library folder that nothing else on the system would look in.
-ic_log_dir() {
-  if [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
-    echo "$HOME/Library/Logs"
-  else
-    echo "${XDG_STATE_HOME:-$HOME/.local/state}"
-  fi
-}
-
 # Desktop notification, best effort. Never fails the caller: these run from
 # launchd and systemd timers where there may be no session to notify at all.
 ic_notify() {
@@ -160,7 +149,7 @@ ic_notify() {
 # nvm is not installed. Nothing under nix/ provides Node on any platform, and
 # both setup scripts install it through nvm alone, so on a machine bootstrapped
 # from this repo this is the only place node, npm, pnpm and the npm-linked axi
-# binaries live; a PATH without it makes the weekly sync-forks run and ic-doctor
+# binaries live; a PATH without it makes the daily sync-forks run and ic-doctor
 # report every one of them missing on a perfectly healthy machine.
 #
 # Globbing and parameter expansion only, no subprocesses: platform.sh is sourced
@@ -233,7 +222,7 @@ ic_default_path() {
   if [ "$(uname -s 2>/dev/null)" = "Darwin" ]; then
     # Behind /opt/homebrew/bin deliberately. A Mac bootstrapped by setup/mac.sh
     # has Node only under ~/.nvm, so without this entry every pnpm arm of the
-    # weekly sync-forks run and every Node tool ic-doctor looks for is missing.
+    # daily sync-forks run and every Node tool ic-doctor looks for is missing.
     # A machine that also has a hand-installed Homebrew node keeps using it,
     # rather than silently switching Node version at the next timer run.
     echo "$HOME/.local/bin:/opt/homebrew/bin${nvm_bin:+:$nvm_bin}:/run/current-system/sw/bin:/etc/profiles/per-user/$USER/bin:$HOME/go/bin:/usr/bin:/bin:/usr/sbin:/sbin"

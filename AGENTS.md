@@ -36,7 +36,7 @@ Sync with `git fetch upstream && git merge upstream/main`, keeping the fork-spec
 Upstream has marked itself superseded by `kunchenguid/dotfiles`, a different repo that is not this fork's parent, so that notice is deliberately not carried into this README.
 
 Merge sync PRs with the "Create a merge commit" method, never squash or rebase.
-A squash discards the merge parent, so `upstream/main` never becomes an ancestor of `main` and the same files re-conflict on every future sync, including the weekly `sync-forks` run.
+A squash discards the merge parent, so `upstream/main` never becomes an ancestor of `main`: the same files re-conflict on every future manual sync, and the daily `sync-forks` run (fast-forward-only) reports the repo as diverged forever.
 Earlier sync PRs were squash-merged for exactly this reason; the ancestry was restored afterward with a `git merge -s ours upstream/main` merge commit, which is the correct recovery if it ever happens again.
 
 ## The bootstrap scripts: never run them for real
@@ -49,15 +49,16 @@ Earlier sync PRs were squash-merged for exactly this reason; the ancestry was re
 
 ## Testing
 
-Three suites:
+Four suites:
 
 ```bash
 bash tests/mac_setup_test.sh        # setup/mac.sh, stubbed
 bash tests/install_dispatch_test.sh # setup/install.sh detection and dispatch, stubbed
+bash tests/sync_forks_test.sh       # files/bin/sync-forks, sandboxed git fixtures
 bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
 
-The first two install nothing and run anywhere; the third needs Docker and skips itself without it.
+All but the last install nothing and run anywhere; `linux_e2e_docker.sh` needs Docker and skips itself without it.
 
 `tests/README.md` is the authoritative description of what each suite covers - the stubs, the scenarios, the fixture placement, and the sandbox guards - and is the file to update when a suite changes. Do not restate that detail here.
 

@@ -1,19 +1,30 @@
 #!/usr/bin/env bash
-# sync-forks: weekly sync of forked tooling with their upstream parents.
+# sync-forks: daily sync of forked repos with their upstream parents.
 #
-# For each fork it:
-#   1. fetches upstream and origin,
-#   2. merges upstream/main into your fork's main (keeping your changes),
-#   3. pushes your fork to origin,
-#   4. rebuilds/reinstalls the tool so the update takes effect.
+# The repo list lives in the fleet manifest (~/github/.fleet/manifest.yaml);
+# this script never hardcodes repo names. For each entry with sync: true it:
+#   1. re-asserts commit identity (strips any local user.email/user.name
+#      override; a wrong resolved identity fails the repo),
+#   2. fetches all remotes and computes divergence against upstream (a fork
+#      whose branch has local commits is left untouched - never merged, never
+#      rebased, and its GitHub remote is never moved either: behind as well
+#      is reported as DIVERGED, ahead-only is reported and never published),
+#   3. only when the fork has no local-only commits, asks GitHub to
+#      fast-forward the fork's default branch from upstream (gh repo sync -b:
+#      server-side, cheap, refuses non-fast-forwards),
+#   4. fast-forwards the local default branch from upstream (--ff-only),
+#   5. pushes the default branch to the fork only after an actual
+#      fast-forward (normal push only),
+#   6. re-runs the repo's install command from the manifest when it updated,
+#      so npm-linked CLIs and ~/.local/bin binaries stay current.
 #
-# Safe by design: skips repos with uncommitted changes, aborts on merge
-# conflict and notifies you, and never force-pushes. Run with --dry-run to
-# only report how far behind upstream each fork is.
+# Safe by design: skips dirty trees and in-progress rebases/merges, skips
+# repos not on their default branch, is non-fatal per repo, never force-pushes,
+# and notifies only on failure. Run with --dry-run to only report drift.
 set -uo pipefail
 
-# Platform differences (PATH, log location, notifications) live in one place,
-# shared with the installer and ic-doctor. Derived from this script's own
+# Platform differences (PATH, notifications) live in one place, shared with
+# the installer and ic-doctor. Derived from this script's own
 # location so it resolves under launchd and systemd alike.
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=../../setup/lib/platform.sh
@@ -24,9 +35,16 @@ PATH="$(ic_default_path)"
 export PATH
 
 GH_ROOT="$HOME/github"
-LOG="$(ic_log_dir)/sync-forks.log"
-REPOS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi wheelhouse quota-axi"
-mkdir -p "$(dirname "$LOG")"
+FLEET_DIR="$GH_ROOT/.fleet"
+MANIFEST="$FLEET_DIR/manifest.yaml"
+LOG_DIR="$FLEET_DIR/logs"
+LOG="$LOG_DIR/sync-$(date +%Y%m%d).log"
+IDENT_EMAIL="shreejitverma@gmail.com"
+IDENT_NAME="Shreejit Verma"
+
+mkdir -p "$LOG_DIR"
+# Rotate: keep 30 days of daily logs.
+find "$LOG_DIR" -name 'sync-*.log' -mtime +30 -delete 2>/dev/null || true
 
 DRY=0
 [ "${1:-}" = "--dry-run" ] && DRY=1
@@ -34,91 +52,204 @@ DRY=0
 log()    { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" | tee -a "$LOG"; }
 notify() { ic_notify "$1" "$2"; }
 
-rebuild_tool() {
-  case "$1" in
-    no-mistakes) ( cd "$GH_ROOT/no-mistakes" && make build >>"$LOG" 2>&1 \
-                   && install -m755 bin/no-mistakes "$HOME/.local/bin/no-mistakes" ) \
-                 && log "  rebuilt no-mistakes" || log "  rebuild no-mistakes FAILED" ;;
-    treehouse)   ( cd "$GH_ROOT/treehouse" && make build >>"$LOG" 2>&1 \
-                   && install -m755 treehouse "$HOME/.local/bin/treehouse" ) \
-                 && log "  rebuilt treehouse" || log "  rebuild treehouse FAILED" ;;
-    gnhf)        ( cd "$GH_ROOT/gnhf" && pnpm install --frozen-lockfile >>"$LOG" 2>&1 \
-                   && pnpm run build >>"$LOG" 2>&1 ) \
-                 && log "  rebuilt gnhf" || log "  rebuild gnhf FAILED" ;;
-    lavish-axi)  ( cd "$GH_ROOT/lavish-axi" && pnpm install --frozen-lockfile >>"$LOG" 2>&1 \
-                   && pnpm run build >>"$LOG" 2>&1 ) \
-                 && log "  rebuilt lavish-axi" || log "  rebuild lavish-axi FAILED" ;;
-    chrome-devtools-axi) ( cd "$GH_ROOT/chrome-devtools-axi" && pnpm install --frozen-lockfile >>"$LOG" 2>&1 \
-                   && pnpm run build >>"$LOG" 2>&1 ) \
-                 && log "  rebuilt chrome-devtools-axi" || log "  rebuild chrome-devtools-axi FAILED" ;;
-    gh-axi)      ( cd "$GH_ROOT/gh-axi" && pnpm install --frozen-lockfile >>"$LOG" 2>&1 \
-                   && pnpm run build >>"$LOG" 2>&1 ) \
-                 && log "  rebuilt gh-axi" || log "  rebuild gh-axi FAILED" ;;
-    tasks-axi)   ( cd "$GH_ROOT/tasks-axi" && pnpm install --frozen-lockfile >>"$LOG" 2>&1 \
-                   && pnpm run build >>"$LOG" 2>&1 ) \
-                 && log "  rebuilt tasks-axi" || log "  rebuild tasks-axi FAILED" ;;
-    quota-axi)   ( cd "$GH_ROOT/quota-axi" && pnpm install --frozen-lockfile >>"$LOG" 2>&1 \
-                   && pnpm run build >>"$LOG" 2>&1 ) \
-                 && log "  rebuilt quota-axi" || log "  rebuild quota-axi FAILED" ;;
-    firstmate)   : ;;  # pure shell, nothing to build
-    axi)         : ;;  # skill + SDK source, no daily-use binary to build
-    wheelhouse)  : ;;  # GitHub Actions machine; runs on GitHub, nothing local to build
+if [ ! -f "$MANIFEST" ]; then
+  log "no fleet manifest at $MANIFEST -> nothing to sync on this host"
+  exit 0
+fi
+
+# Parse the manifest into "name|default_branch|install" lines for sync: true
+# entries. The manifest format is controlled by us (flat two-space keys under
+# "- name:" items), so a line-oriented awk pass is deliberate - no yq
+# dependency under launchd's minimal PATH.
+manifest_entries() {
+  awk '
+    function flush() {
+      if (name != "" && sync == "true") printf "%s|%s|%s\n", name, branch, install
+      name = ""; branch = "main"; sync = "false"; install = "none"
+    }
+    /^- name:/        { flush(); name = $3 }
+    /^  default_branch:/ { branch = $2 }
+    /^  sync:/        { sync = $2 }
+    /^  install:/     {
+      install = $0
+      sub(/^  install:[ ]*/, "", install)
+      gsub(/^"|"$/, "", install)
+    }
+    END { flush() }
+  ' "$MANIFEST"
+}
+
+# Re-assert identity: a local override silently defeats the global setting and
+# is the #1 way forks end up with the wrong author. Remove it, then verify the
+# resolved identity; a mismatch after that means a wider-scope config (e.g. a
+# stray ~/.gitconfig, which git reads after the nix-managed file) is winning,
+# which this script must not edit - it fails the repo so the failure
+# notification fires instead of the wrong identity passing silently.
+#
+# A dry run must not mutate, so it cannot unset the local override before
+# checking; it instead resolves the identity from the non-local config scopes,
+# i.e. what a real run would see after stripping the override.
+ident_without_local() { # key
+  git config --show-scope --get-all "$1" 2>/dev/null \
+    | awk -F'\t' '$1 != "local" && $1 != "worktree" { v = $2 } END { print v }'
+}
+
+assert_identity() {
+  local r="$1" ident
+  if git config --local user.email >/dev/null 2>&1; then
+    log "[$r] removing local user.email override ($(git config --local user.email))"
+    [ "$DRY" -eq 0 ] && git config --local --unset user.email
+  fi
+  if git config --local user.name >/dev/null 2>&1; then
+    log "[$r] removing local user.name override"
+    [ "$DRY" -eq 0 ] && git config --local --unset user.name
+  fi
+  if [ "$DRY" -eq 1 ]; then
+    ident="$(ident_without_local user.name) <$(ident_without_local user.email)>"
+  else
+    ident="$(git var GIT_AUTHOR_IDENT 2>/dev/null)"
+  fi
+  case "$ident" in
+    "$IDENT_NAME <$IDENT_EMAIL>"*) : ;;
+    *)
+      log "[$r] ERROR: author identity does not resolve to $IDENT_EMAIL (check ~/.gitconfig)"
+      return 1
+      ;;
   esac
 }
 
-synced="" conflicts="" skipped=""
+synced="" diverged="" skipped="" failed=""
 
-log "===== sync-forks start (dry-run=$DRY) ====="
-for r in $REPOS; do
+log "===== sync-forks start (dry-run=$DRY, manifest=$MANIFEST) ====="
+
+# The line-oriented parser above matches an exact format; if the externally
+# owned manifest ever drifts (say, to indented list items), it would silently
+# yield zero entries and the fleet would stop syncing with no signal. Log the
+# parsed count and treat zero entries from an existing manifest as a failure.
+entries="$(manifest_entries)"
+entry_count=0
+[ -n "$entries" ] && entry_count="$(printf '%s\n' "$entries" | wc -l | tr -d ' ')"
+entry_word="entries"
+[ "$entry_count" -eq 1 ] && entry_word="entry"
+log "manifest: $entry_count sync-eligible $entry_word"
+if [ "$entry_count" -eq 0 ]; then
+  log "ERROR: manifest exists but yielded 0 sync-eligible entries (format drift?)"
+  [ "$DRY" -eq 0 ] && notify "sync-forks: manifest parse failure" "0 sync-eligible entries parsed from $MANIFEST"
+  exit 1
+fi
+
+while IFS='|' read -r r branch install; do
   d="$GH_ROOT/$r"
   [ -d "$d/.git" ] || { log "[$r] not cloned, skip"; skipped="$skipped $r"; continue; }
-  cd "$d" || continue
+  cd "$d" || { log "[$r] cd failed"; failed="$failed $r"; continue; }
 
-  git fetch --quiet --all --prune 2>>"$LOG" || { log "[$r] fetch failed"; continue; }
-
-  branch=main
-  git show-ref --verify --quiet "refs/heads/$branch" || branch=$(git symbolic-ref --short HEAD 2>/dev/null || echo main)
-
-  if [ -n "$(git status --porcelain)" ]; then
-    log "[$r] working tree dirty -> skipping merge; pushing committed work only"
-    [ "$DRY" -eq 0 ] && { git push -q origin "$branch" 2>>"$LOG" && log "[$r] pushed committed work"; }
+  # In-progress rebase or merge: leave the repo alone entirely.
+  gitdir=$(git rev-parse --git-dir 2>/dev/null || echo .git)
+  if [ -d "$gitdir/rebase-merge" ] || [ -d "$gitdir/rebase-apply" ] || [ -f "$gitdir/MERGE_HEAD" ]; then
+    log "[$r] rebase/merge in progress -> skipped"
     skipped="$skipped $r"
     continue
   fi
 
-  git checkout -q "$branch" 2>>"$LOG" || { log "[$r] checkout $branch failed"; continue; }
-  behind=$(git rev-list --count "$branch..upstream/$branch" 2>/dev/null || echo 0)
-
-  if [ "$DRY" -eq 1 ]; then
-    log "[$r] $behind commit(s) behind upstream/$branch"
+  if [ -n "$(git status --porcelain)" ]; then
+    log "[$r] working tree dirty -> skipped"
+    skipped="$skipped $r"
     continue
   fi
 
-  if [ "$behind" -gt 0 ]; then
-    if git merge --no-edit "upstream/$branch" >>"$LOG" 2>&1; then
-      log "[$r] merged $behind upstream commit(s)"
-      rebuild_tool "$r"
-    else
-      git merge --abort 2>>"$LOG" || true
-      log "[$r] MERGE CONFLICT with upstream/$branch -> aborted, left untouched"
-      conflicts="$conflicts $r"
-      continue
+  head=$(git symbolic-ref --short HEAD 2>/dev/null || echo DETACHED)
+  if [ "$head" != "$branch" ]; then
+    log "[$r] on '$head', not default '$branch' -> skipped"
+    skipped="$skipped $r"
+    continue
+  fi
+
+  assert_identity "$r" || { failed="$failed $r"; continue; }
+
+  git fetch --quiet --all --prune 2>>"$LOG" || { log "[$r] fetch failed"; failed="$failed $r"; continue; }
+
+  # A manifest entry whose clone lacks the upstream remote (or names a branch
+  # that does not exist there) must not read as "already up to date": with no
+  # ref to compare against, both counts below would come back 0.
+  if ! git rev-parse --verify --quiet "refs/remotes/upstream/$branch" >/dev/null; then
+    log "[$r] no upstream/$branch after fetch (missing remote or wrong branch?) -> failed"
+    failed="$failed $r"
+    continue
+  fi
+
+  behind=$(git rev-list --count "$branch..upstream/$branch" 2>/dev/null || echo 0)
+  ahead=$(git rev-list --count "upstream/$branch..$branch" 2>/dev/null || echo 0)
+
+  if [ "$DRY" -eq 1 ]; then
+    log "[$r] behind=$behind ahead=$ahead vs upstream/$branch"
+    continue
+  fi
+
+  # Server-side sync only once the fork is known to have no local-only
+  # commits: gh repo sync would still fast-forward the fork's remote branch
+  # when local commits exist but are unpushed, leaving the next push rejected
+  # as non-fast-forward. Non-fatal: local sync below is the layer that must
+  # succeed. -b pins it to the manifest branch the rest of this loop uses.
+  if [ "$ahead" -eq 0 ] && command -v gh >/dev/null 2>&1; then
+    gh repo sync "shreejitverma/$r" -b "$branch" </dev/null >>"$LOG" 2>&1 \
+      && log "[$r] server-side fork sync ok" \
+      || log "[$r] server-side fork sync skipped (offline or API error)"
+  fi
+
+  # Local-only commits are never auto-published: behind as well means the fork
+  # has truly diverged; ahead-only means unpushed local work on the default
+  # branch, which stays local until a human pushes it. The push below happens
+  # only after an actual fast-forward.
+  if [ "$behind" -gt 0 ] && [ "$ahead" -gt 0 ]; then
+    log "[$r] DIVERGED: $ahead local, $behind upstream commit(s) -> left untouched, resolve manually"
+    diverged="$diverged $r"
+    continue
+  fi
+  if [ "$ahead" -gt 0 ]; then
+    log "[$r] ahead-only: $ahead unpushed local commit(s), not publishing"
+    skipped="$skipped $r"
+    continue
+  fi
+  if [ "$behind" -eq 0 ]; then
+    log "[$r] already up to date with upstream"
+    synced="$synced $r"
+    continue
+  fi
+
+  repo_ok=1
+  if git merge --ff-only "upstream/$branch" >>"$LOG" 2>&1; then
+    log "[$r] fast-forwarded $behind commit(s)"
+    if [ -n "$install" ] && [ "$install" != "none" ]; then
+      if ( cd "$d" && eval "$install" </dev/null >>"$LOG" 2>&1 ); then
+        log "[$r] reinstalled ($install)"
+      else
+        log "[$r] reinstall FAILED ($install)"
+        failed="$failed $r"
+        repo_ok=0
+      fi
     fi
   else
-    log "[$r] already up to date with upstream"
+    log "[$r] ff-only merge unexpectedly failed -> left untouched"
+    failed="$failed $r"
+    continue
   fi
 
   if git push -q origin "$branch" 2>>"$LOG"; then
-    log "[$r] pushed to origin"
-    synced="$synced $r"
+    [ "$repo_ok" -eq 1 ] && synced="$synced $r"
   else
     log "[$r] push to origin FAILED (auth/network?)"
+    failed="$failed $r"
   fi
-done
+done < <(printf '%s\n' "$entries")
 
-log "===== done. synced:[$synced ] conflicts:[$conflicts ] skipped:[$skipped ] ====="
-if [ -n "$conflicts" ]; then
-  notify "sync-forks: conflicts" "Manual merge needed:$conflicts"
-else
-  notify "sync-forks complete" "Synced:${synced:- up-to-date}"
+log "===== done. synced:[$synced ] diverged:[$diverged ] skipped:[$skipped ] failed:[$failed ] ====="
+
+# Notify on failure only: diverged forks and hard failures need a human;
+# a quiet success needs nothing. A dry run is report-only and never notifies.
+if [ "$DRY" -eq 0 ]; then
+  if [ -n "$failed" ]; then
+    notify "sync-forks: failures" "Failed:$failed"
+  elif [ -n "$diverged" ]; then
+    notify "sync-forks: diverged forks" "Manual reconcile needed:$diverged"
+  fi
 fi

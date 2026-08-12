@@ -3,12 +3,13 @@
 ```bash
 bash tests/mac_setup_test.sh        # setup/mac.sh, stubbed
 bash tests/install_dispatch_test.sh # setup/install.sh detection and dispatch, stubbed
+bash tests/sync_forks_test.sh       # files/bin/sync-forks, sandboxed git fixtures
 bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
 
-The first two never install anything and run anywhere.
-The third needs Docker and skips itself when Docker is unavailable.
-All three honour `DEBUG_KEEP_SANDBOX=1`, which leaves the scratch directory each one works in (per scenario, for `mac_setup_test.sh`) on disk for inspection after a failing run instead of removing it on exit.
+All but the last never install anything and run anywhere.
+`linux_e2e_docker.sh` needs Docker and skips itself when Docker is unavailable.
+All four honour `DEBUG_KEEP_SANDBOX=1`, which leaves the scratch directory each one works in (per scenario, for `mac_setup_test.sh`) on disk for inspection after a failing run instead of removing it on exit.
 
 `mac_setup_test.sh` is a regression test for `setup/mac.sh`.
 It never runs the script against the real machine, since that script installs Nix and activates a real `nix-darwin` system.
@@ -78,3 +79,14 @@ Two deliberate gaps:
 
 Verification inside the container deliberately runs without `set -e`.
 The image is minimal, and under `-e` one missing utility aborts the script and makes every later probe report as a config failure instead of a missing tool.
+
+## sync_forks_test.sh
+
+End-to-end regression test for `files/bin/sync-forks`, the manifest-driven daily fork sync.
+It runs the real script against sandboxed `$HOME` directories containing real git repositories wired to local bare `origin` and `upstream` remotes, so every fetch, `--ff-only` merge, and push is a genuine git operation asserted through resulting ref state.
+Nothing reaches the network or the real machine: the PATH the script builds for itself (`ic_default_path`) leads with the sandbox's `~/.local/bin`, where stub `gh`, `osascript`, and `notify-send` executables record their invocations instead of calling GitHub or posting notifications.
+The stubs and the install-command fixtures deliberately read stdin, so dropping the `</dev/null` redirects inside the manifest while-read loop surfaces as later manifest entries being slurped off the pipe and never processed.
+
+It covers: a behind fork fast-forwarded, pushed, and reinstalled; an up-to-date fork whose install command must not re-run and whose stale local `user.email`/`user.name` overrides are stripped; a diverged fork reported and left byte-for-byte untouched (locally, on the fork remote, and by `gh repo sync`, which must not be called for it); an ahead-only fork reported and never published (no push, no `gh repo sync`); dirty-tree, wrong-branch, uncloned, and `sync: false` entries; the parsed sync-eligible entry count being logged, with a manifest that parses to zero entries (format drift) exiting non-zero and notifying instead of reading as a clean run; 30-day log rotation; a missing `upstream` remote failing the repo rather than reading as up to date; failure notifications outranking diverged ones; a host with no manifest exiting 0 quietly; `--dry-run` reporting drift while mutating nothing, never notifying, and judging identity as if the local override it reports were already stripped; a stray global identity failing the repo before any sync; and `ic-workflow.zsh` sourcing the generated fleet aliases file when present and sourcing cleanly when absent.
+
+The fleet manifest, `gh` behaviour, and desktop notifications are the suite's stub boundary; the launchd schedule and systemd timer that trigger the script are nix module config, outside this suite's scope and not asserted by any automated check.

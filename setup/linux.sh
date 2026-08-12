@@ -291,6 +291,6 @@ case "${login_shell##*/}" in
     ;;
 esac
 if [ "$IS_WSL" -eq 1 ]; then
-  echo "Note: the weekly fork sync timer is not enabled on WSL, because systemd is off by default there."
+  echo "Note: the daily fork sync timer is not enabled on WSL, because systemd is off by default there."
   echo "Run 'syncforks' by hand, or enable systemd in /etc/wsl.conf."
 fi
