@@ -47,10 +47,10 @@ The goal is to provide a reusable foundation that you can make your own.
 - `nix/home/` - the layers those entry points compose: `dotfiles.nix` (the one definition of where this checkout lives, read by all of the below), `common.nix` (cross-platform), `desktop.nix` (fonts and linked app configs), `darwin.nix`, `linux.nix`, `wsl.nix`
 - `files/.config/wezterm/wezterm.lua` - WezTerm config linked into place
 - `files/.config/herdr/config.toml` - herdr config linked into place
-- `files/bin/` - personal scripts kept on `PATH`, including `sync-forks` (weekly fork sync), `ic-link` (symlink farm), and `ic-doctor` (health check)
+- `files/bin/` - personal scripts kept on `PATH`, including `sync-forks` (daily fork sync), `ic-link` (symlink farm), and `ic-doctor` (health check)
 - `files/skills/` - agent skills owned by this repo (currently `ship`)
 - `files/zsh/ic-workflow.zsh` - IC workflow shell config sourced by zsh
-- `tests/` - regression tests for the bootstrap scripts and the Linux end-to-end install
+- `tests/` - regression tests for the bootstrap scripts, the fork sync script, and the Linux end-to-end install
 - `AGENTS.md` - repo-specific notes for coding agents (`CLAUDE.md` is a symlink to it)
 - `blog.md` - local copy of the [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web)
 
@@ -179,12 +179,13 @@ To apply a change without moving the pins, use `rebuild`.
 ```bash
 bash tests/mac_setup_test.sh        # setup/mac.sh, against stubs
 bash tests/install_dispatch_test.sh # platform detection and dispatch, against stubs
+bash tests/sync_forks_test.sh       # files/bin/sync-forks, sandboxed git fixtures
 bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
 
 Do not run `setup/mac.sh`, `setup/linux.sh`, or `setup/install.sh` against a development or CI machine just to test them.
-The first two suites above run the real script logic against a sandbox of stub executables, so nothing is ever installed or activated, and they run anywhere.
-The third needs Docker and skips itself without it; it performs a genuine Nix build and Home Manager activation inside a container, then asserts on the environment that results.
+The first three suites above run the real script logic against sandboxes (stub executables for the setup scripts, local git fixtures for the fork sync), so nothing is ever installed, activated, or pushed anywhere real, and they run anywhere.
+The last needs Docker and skips itself without it; it performs a genuine Nix build and Home Manager activation inside a container, then asserts on the environment that results.
 
 Two gaps are deliberate and documented: the Determinate installer branch of `setup/linux.sh` is not exercised (the container image already ships Nix), and `setup/windows.ps1` is not covered at all, since it needs Windows and PowerShell.
 See [`tests/README.md`](tests/README.md) for the scenarios each suite covers and how the sandbox is guarded.
@@ -257,7 +258,7 @@ origin   -> https://github.com/shreejitverma/<repo>.git
 upstream -> https://github.com/kunchenguid/<repo>.git
 ```
 
-This is what makes "merge and keep my changes" the default posture: local commits (like wheelhouse's `Configure fleet for shreejitverma`) survive every upstream sync.
+This is what makes local commits safe: the sync is fast-forward-only, so a fork with its own commits (like wheelhouse's `Configure fleet for shreejitverma`) is reported as diverged and left untouched rather than merged or clobbered.
 
 **2. Binaries.**
 Go tools are built with `make` and installed to `~/.local/bin`:
@@ -284,9 +285,12 @@ Skills live in the clones and are symlinked twice, so every agent runtime sees t
 A skill's name does not have to match its repo: `lavish` comes from `lavish-axi`, `stow` (sweep a session for durable knowledge before a context reset) comes from `firstmate`, and `axi` lives under `.agents/skills` inside its repo.
 One skill is owned by this repo rather than a tool fork: `ship` (`files/skills/ship`), which encodes the end-to-end quality loop below as an invocable skill.
 
-**4. Weekly sync.**
-`files/bin/sync-forks` fetches upstream for every repo in its `REPOS` list, merges `upstream/main` into `main` (keeping local changes; conflicts abort and notify instead of clobbering), pushes the fork, and rebuilds the affected binaries.
-A launchd agent defined in `nix/home/darwin.nix` runs it every Sunday at 10:00 on macOS; `nix/home/linux.nix` schedules the same run as a systemd user timer, and `nix/home/wsl.nix` ships that timer disabled.
+**4. Daily sync.**
+`files/bin/sync-forks` reads the fleet manifest (`~/github/.fleet/manifest.yaml`, the single source of truth for the repo list, maintained outside this repo), re-asserts commit identity, and fast-forwards each fork's default branch from upstream.
+It never merges: a fork with local commits is reported as diverged (or ahead) and left untouched, locally and on GitHub.
+When a fast-forward actually updated a repo, it pushes the fork and re-runs that repo's install command from the manifest.
+A launchd agent defined in `nix/home/darwin.nix` runs it daily at 10:00 on macOS, with `RunAtLoad` catching runs missed while the machine was off; `nix/home/linux.nix` schedules the same run as a systemd user timer, and `nix/home/wsl.nix` ships that timer disabled.
+Logs land in `~/github/.fleet/logs/` with 30-day rotation, and a desktop notification fires on failure only.
 `syncforks` and `syncforks-dry` run it by hand.
 
 **5. Shell ergonomics.**
@@ -433,12 +437,13 @@ ic-link
 `ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills` and `~/.codex/skills`, the `~/AGENTS.md` and `~/.codex/AGENTS.md` chain, and the personal-layer links from `~/github/agents` (skipped with a note if that repo is absent).
 Rerun it any time; it repairs stale links in place.
 
-**Step 7: enable the weekly sync.**
-The script and the launchd agent are already in this repo, so applying the config is enough:
+**Step 7: enable the daily sync.**
+The sync engine and its launchd schedule are in this repo; the list of repos it syncs lives in the fleet manifest at `~/github/.fleet/manifest.yaml`, which is maintained outside this repo.
+On a machine without that manifest the sync logs that there is nothing to sync and exits cleanly, so applying the config is safe either way:
 
 ```bash
 rebuild
-syncforks-dry   # verify: every repo should report how far behind upstream it is
+syncforks-dry   # verify: every manifest repo reports how far behind/ahead of upstream it is
 ```
 
 **Step 8: one-time per-tool setup.**
@@ -450,7 +455,7 @@ quota-axi --allow-keychain-prompt auth
 ```
 
 wheelhouse is configured on GitHub, not locally: commit your fleet of repos to your fork, enable Actions on it, and add the secrets its README lists.
-That fleet-config commit is exactly the kind of local change `sync-forks` preserves.
+That fleet-config commit makes the wheelhouse fork diverged, so `sync-forks` reports it and leaves it untouched rather than ever merging over it.
 
 firstmate runs from inside its workspace; the shell function handles that:
 
@@ -480,7 +485,7 @@ npx skills add <owner>/<repo> --skill <name> -g   # -g = all projects (~/.claude
 ic-doctor
 ```
 
-`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the weekly sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md`, and codex skills).
+`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the daily sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md`, and codex skills).
 Checks that do not apply to a platform are reported as such rather than failed: WSL has no desktop layer, so the linked terminal configs are not expected there, and its sync timer is left disabled because systemd is off by default.
 It exits non-zero if anything needs attention, and every failure line names the command that fixes it.
 A healthy system ends with `ic-doctor: all checks passed`.
@@ -492,7 +497,7 @@ The checklist when adopting the next tool, so it inherits all five layers:
 1. Fork, clone, and set the `upstream` remote (Step 2 pattern).
 2. Build and put it on `PATH`: `pnpm install --frozen-lockfile && pnpm run build && npm link` for Node tools, or `make build && install -m755 <bin> ~/.local/bin/<bin>` for Go tools.
 3. Add its skill to `files/bin/ic-link` (both the canonical link and the `ALL_SKILLS` mirror list) and run `ic-link`.
-4. Add the repo to `REPOS` and a rebuild case to `rebuild_tool()` in `files/bin/sync-forks`.
+4. Add the repo to the fleet manifest (`~/github/.fleet/manifest.yaml`), with its default branch and install command, so the daily sync picks it up.
 5. Add it to the `FORKS`, `BINARIES`, and `SKILLS` lists in `files/bin/ic-doctor`.
 6. Optionally add a short alias in `files/zsh/ic-workflow.zsh`.
 7. Run `syncforks-dry` and `ic-doctor` to confirm, then commit the dotfiles change.
@@ -531,7 +536,7 @@ The checklist when adopting the next tool, so it inherits all five layers:
   Home Manager backs up a regular file it needs to replace, but its collision check skips the backup entirely for a symlink, so activation would fail partway with `would be clobbered` after the whole build had already run.
   The installer checks for this before it installs or builds anything and names each path; `mv ~/.bashrc ~/.bashrc.pre-home-manager` and re-run.
   This also fires on a symlink whose content happens to match what Home Manager would write, which activation would have skipped harmlessly; moving it aside costs nothing and the check stays honest about what it can predict.
-- **The weekly fork sync never runs on WSL.**
+- **The daily fork sync never runs on WSL.**
   That is deliberate: the timer is shipped disabled there because systemd is off by default.
   Run `syncforks` by hand, or enable systemd in `/etc/wsl.conf` and switch to the Linux profile behaviour.
 - **`setup/linux.sh` refuses a checkout under `/mnt/c`.**
@@ -540,12 +545,14 @@ The checklist when adopting the next tool, so it inherits all five layers:
 - **quota-axi shows `auth_required` for claude.**
   Keychain access has not been granted; run `quota-axi --allow-keychain-prompt auth` and click "Always Allow".
 - **sync-forks skipped a repo.**
-  It skips anything with uncommitted changes or a non-`main` branch by design; commit or stash, switch to `main`, and rerun `syncforks`.
-- **sync-forks reported a conflict.**
-  It aborted the merge and left the repo untouched; resolve by hand with `git merge upstream/main` in that clone, keeping your changes.
+  By design it skips uncommitted changes, an in-progress rebase or merge, a branch other than the manifest's default branch, an uncloned manifest entry, unpushed local commits, and `sync: false` entries; the log line names the reason.
+  Fix the cause and rerun `syncforks`.
+- **sync-forks reported a diverged fork.**
+  It never merges: a fork that is both ahead of and behind upstream is left untouched, locally and on GitHub.
+  Reconcile by hand in that clone (for example `git merge upstream/main`, keeping your changes), push, and the next run takes over again.
 - **Where are the sync logs?**
-  On macOS, `~/Library/Logs/sync-forks.log` (script log) plus `sync-forks.out.log` and `sync-forks.err.log` (launchd streams).
-  On Linux and WSL there is no `~/Library`, so the script log follows the XDG state directory instead: `${XDG_STATE_HOME:-~/.local/state}/sync-forks.log`, with the run's own output in `journalctl --user -u sync-forks`.
+  `~/github/.fleet/logs/sync-YYYYMMDD.log` on every platform, one file per day with 30 days kept.
+  On macOS launchd's own streams land next to them as `launchd.out.log` and `launchd.err.log`; on Linux the run's output is also in `journalctl --user -u sync-forks`.
 - **A skill or instruction symlink is missing or points somewhere stale.**
   Run `ic-link`; it recreates the entire farm idempotently.
 - **Everything else.**
@@ -562,7 +569,7 @@ The `ship` skill encodes the whole loop, so any agent in any tool can be told `/
 - Ship through `nm` (no-mistakes), which runs review, tests, lint, docs, push, PR, and CI as one gate, so nothing reaches the remote unvalidated.
 - Before ending a long agent session, invoke the `stow` skill so preferences, project facts, and unfinished next steps land on disk instead of dying with the context window.
 - Before bed, hand the backlog to `gn` (gnhf) for a supervised overnight run, and read the results over coffee.
-- Sunday at 10:00, `sync-forks` merges upstream improvements into every fork, keeps local changes, pushes, and rebuilds, so the whole toolchain stays current without a thought.
+- Every day at 10:00, `sync-forks` fast-forwards every manifest fork from its upstream, pushes, and reinstalls what changed, notifying only when something needs a human, so the whole toolchain stays current without a thought.
 
 ## Related
 

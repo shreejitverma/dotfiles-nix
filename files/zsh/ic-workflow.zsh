@@ -460,7 +460,7 @@ dsh() {
 }
 
 # =============================================================================
-# Integrated forked tooling (clones under ~/github, synced weekly by sync-forks)
+# Integrated forked tooling (clones under ~/github, synced daily by sync-forks)
 # =============================================================================
 command -v treehouse   >/dev/null && alias th='treehouse'
 command -v no-mistakes >/dev/null && alias nm='no-mistakes'
