@@ -52,16 +52,28 @@ in
     EDITOR = "vim";
   };
 
-  # Keep user-local binaries (e.g. the Claude CLI) and repo scripts on PATH.
+  # Keep user-local binaries (e.g. the Claude CLI), repo scripts, and Go tool
+  # installs on PATH. go/bin is where no-mistakes and treehouse install since
+  # upstream moved their make targets to $(go env GOPATH)/bin; the daemon
+  # plist already references it.
   home.sessionPath = [
     "$HOME/.local/bin"
     "${dotfilesDir}/files/bin"
+    "$HOME/go/bin"
   ];
 
   programs.git = {
     enable = true;
     lfs.enable = true;
-    signing.format = null;
+    # SSH commit signing with a dedicated passphrase-less key. The public half
+    # must also be registered on GitHub as a signing key (gh ssh-key add
+    # --type signing) for the Verified badge; the allowed-signers file makes
+    # git log --show-signature verify locally.
+    signing = {
+      format = "ssh";
+      key = "~/.ssh/id_ed25519_signing.pub";
+      signByDefault = true;
+    };
     # Defense-in-depth identity for repos under ~/github, with a known limit:
     # git reads ~/.gitconfig after this generated file, and an includeIf is
     # inlined where the directive appears, so a stray ~/.gitconfig with a
@@ -82,6 +94,7 @@ in
         email = "shreejitverma@gmail.com";
       };
       github.user = "shreejitverma";
+      gpg.ssh.allowedSignersFile = "~/github/.fleet/allowed_signers";
       core.editor = "vim";
       color.ui = true;
       push.autoSetupRemote = true;
