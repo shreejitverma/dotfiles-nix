@@ -1,5 +1,13 @@
 # dotfiles-nix
 
+<p align="center">
+  <a href="https://discord.gg/Wsy2NpnZDu"
+    ><img
+      alt="Discord"
+      src="https://img.shields.io/discord/1439901831038763092?style=flat-square&label=discord"
+  /></a>
+</p>
+
 This repo is the public, reusable core of my development setup, on macOS, Linux, and WSL.
 
 It is built with [Nix](https://nixos.org/), [`nix-darwin`](https://github.com/nix-darwin/nix-darwin), [Home Manager](https://github.com/nix-community/home-manager), and declarative [Homebrew](https://brew.sh/). The goal is to give developers a reproducible base they can fork and adapt without inheriting someone else's entire private dotfiles repo.
@@ -51,7 +59,7 @@ The goal is to provide a reusable foundation that you can make your own.
 - `files/skills/` - agent skills owned by this repo (currently `ship`)
 - `files/zsh/ic-workflow.zsh` - IC workflow shell config sourced by zsh
 - `tests/` - regression tests for the bootstrap scripts, the fork sync script, and the Linux end-to-end install
-- `AGENTS.md` - repo-specific notes for coding agents (`CLAUDE.md` is a symlink to it)
+- `AGENTS.md` - repo-specific notes for coding agents (`CLAUDE.md` imports it via `@AGENTS.md`)
 - `blog.md` - local copy of the [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web)
 
 ## How to use it
