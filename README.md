@@ -59,7 +59,7 @@ The goal is to provide a reusable foundation that you can make your own.
 - `files/skills/` - agent skills owned by this repo (currently `ship`)
 - `files/zsh/ic-workflow.zsh` - IC workflow shell config sourced by zsh
 - `tests/` - regression tests for the bootstrap scripts, the fork sync script, and the Linux end-to-end install
-- `AGENTS.md` - repo-specific notes for coding agents (`CLAUDE.md` is a symlink to it)
+- `AGENTS.md` - repo-specific notes for coding agents (`CLAUDE.md` imports it via `@AGENTS.md`)
 - `blog.md` - local copy of the [blog post](https://open.substack.com/pub/kunchenguid/p/how-i-built-a-reproducible-mac-setup?utm_campaign=post-expanded-share&utm_medium=web)
 
 ## How to use it
