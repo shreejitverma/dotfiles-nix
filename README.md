@@ -245,7 +245,7 @@ This section documents how it is wired on my system today, and then gives the ex
 | [quota-axi](https://github.com/kunchenguid/quota-axi) | Reports local LLM subscription quota windows so agents can pace spend | `quota-axi` |
 | [no-mistakes](https://github.com/kunchenguid/no-mistakes) | `git push no-mistakes`: review, tests, lint, docs, PR, and CI gate before code ships | `no-mistakes` |
 | [treehouse](https://github.com/kunchenguid/treehouse) | Git worktrees without managing worktrees; one worktree per stream of work | `treehouse` |
-| [firstmate](https://github.com/kunchenguid/firstmate) | Talk to one agent, ship with a crew; agent-of-agents workspace | shell function |
+| [firstmate](https://github.com/kunchenguid/firstmate) | Talk to one agent, ship with a crew; agent-of-agents workspace and the default entry point for all AI work | `fm` shell function |
 | [gnhf](https://github.com/kunchenguid/gnhf) | "Good night, have fun": supervised overnight agent coding runs | `gnhf` |
 | [wheelhouse](https://github.com/kunchenguid/wheelhouse) | Cross-repo "what needs my decision" queue on GitHub Issues + Actions | runs on GitHub |
 
@@ -301,7 +301,8 @@ Logs land in `~/github/.fleet/logs/` with 30-day rotation, and a desktop notific
 `files/bin/ic-doctor` is the read-only health check for the whole system; run it whenever something feels off or after changing the setup.
 
 **6. Cross-tool defaults.**
-`~/.claude/CLAUDE.md` is the single source of truth for agent instructions, and its "Default development system" section makes this toolchain the default for every development request.
+`~/.claude/CLAUDE.md` is the single source of truth for agent instructions, and its "Default development system" section makes firstmate the default entry point for all AI work and this toolchain the default for every development request.
+An agent in a plain session outside firstmate points at `fm` once before working directly.
 Other tools reach the same instructions and skills through symlinks:
 
 ```text
@@ -468,11 +469,15 @@ quota-axi --allow-keychain-prompt auth
 wheelhouse is configured on GitHub, not locally: commit your fleet of repos to your fork, enable Actions on it, and add the secrets its README lists.
 That fleet-config commit makes the wheelhouse fork diverged, so `sync-forks` reports it and leaves it untouched rather than ever merging over it.
 
-firstmate runs from inside its workspace; the shell function handles that:
+firstmate is the default way in for all AI work and runs from inside its workspace; the shell function handles that:
 
 ```bash
-fm claude   # cd ~/github/firstmate and launch an agent with the crew
+fm          # cd ~/github/firstmate and launch Claude Code as the first mate
+fm pi       # same, with another verified primary harness
+cdfm        # just jump to the workspace (fleet alias)
 ```
+
+`FM_DEFAULT_HARNESS` changes which harness a bare `fm` launches.
 
 Optional ambient context: some tools can inject their state at agent session start (for Claude Code, Codex, and OpenCode) instead of waiting to be asked.
 Not currently enabled here; enable per tool with:

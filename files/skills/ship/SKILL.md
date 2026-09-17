@@ -7,6 +7,8 @@ user-invocable: true
 # ship
 
 The default operating loop for delivering a feature, fix, or change at production quality.
+firstmate is the default for all AI work: outside a firstmate session, say once that `fm` launches the first mate, and run this loop directly only when the user continues here (see the global operating manual).
+Inside firstmate, the first mate delegates and each crewmate runs this loop in its own worktree under its brief.
 Each phase names the tool that owns it and the exact command to run.
 Skip a phase only when it clearly does not apply (for example, no worktree for a one-line docs fix), and say so.
 

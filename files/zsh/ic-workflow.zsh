@@ -472,11 +472,17 @@ alias syncforks="${(q)IC_DOTFILES}/files/bin/sync-forks"
 alias syncforks-dry="${(q)IC_DOTFILES}/files/bin/sync-forks --dry-run"
 alias icdoctor="${(q)IC_DOTFILES}/files/bin/ic-doctor"
 
-# firstmate is launched from inside its workspace; cd there and optionally
-# start an agent: `firstmate` (just cd) or `firstmate claude` (cd + launch).
+# firstmate is the default entry point for AI work and is launched from inside
+# its workspace: `firstmate` launches the default primary harness there
+# ($FM_DEFAULT_HARNESS, claude by default), `firstmate <cmd...>` launches that
+# command instead, and the fleet alias `cdfm` just jumps to the workspace.
 firstmate() {
   cd "$HOME/github/firstmate" || return 1
-  [ "$#" -gt 0 ] && command "$@"
+  if [ "$#" -gt 0 ]; then
+    command "$@"
+  else
+    command "${FM_DEFAULT_HARNESS:-claude}"
+  fi
 }
 alias fm='firstmate'
 
