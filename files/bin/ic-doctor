@@ -264,20 +264,27 @@ if [ -d "$HOME/.grok" ]; then
   else
     ok "grok: all skills linked"
   fi
+  if [ -f "$GH_ROOT/agents/GROK.md" ]; then
+    grok_manual_fix="run: ic-link"
+  else
+    grok_manual_fix="add ~/github/agents/GROK.md, then run: ic-link"
+  fi
+  grok_manual=$(readlink "$HOME/.grok/AGENTS.md" 2>/dev/null)
+  if [ -n "$grok_manual" ] && [ "$grok_manual" != "$GH_ROOT/agents/GROK.md" ]; then
+    bad "grok: ~/.grok/AGENTS.md points at $grok_manual, not ~/github/agents/GROK.md ($grok_manual_fix)"
+  fi
   if [ -d "$GH_ROOT/agents" ]; then
+    if [ "$grok_manual" = "$GH_ROOT/agents/GROK.md" ]; then
+      ok "grok: ~/.grok/AGENTS.md -> ~/github/agents/GROK.md"
+    elif [ -z "$grok_manual" ]; then
+      bad "grok: ~/.grok/AGENTS.md is missing or not a symlink to ~/github/agents/GROK.md ($grok_manual_fix)"
+    fi
     if [ ! -f "$GH_ROOT/agents/GROK.md" ]; then
       bad "grok: ~/github/agents/GROK.md missing (add it to the agents repo, then run: ic-link)"
+    elif grep -q "Default development system" "$GH_ROOT/agents/GROK.md" 2>/dev/null; then
+      ok "GROK.md declares the default development system"
     else
-      if [ "$(readlink "$HOME/.grok/AGENTS.md" 2>/dev/null)" = "$GH_ROOT/agents/GROK.md" ]; then
-        ok "grok: ~/.grok/AGENTS.md -> ~/github/agents/GROK.md"
-      else
-        bad "grok: ~/.grok/AGENTS.md is not a symlink to ~/github/agents/GROK.md (run: ic-link)"
-      fi
-      if grep -q "Default development system" "$GH_ROOT/agents/GROK.md" 2>/dev/null; then
-        ok "GROK.md declares the default development system"
-      else
-        bad "GROK.md missing the 'Default development system' section"
-      fi
+      bad "GROK.md missing the 'Default development system' section"
     fi
     grok_agents_n=0
     grok_agents_bad=""

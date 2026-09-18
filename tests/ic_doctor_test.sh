@@ -7,7 +7,8 @@
 #   - accept a single official binary at ~/.local/bin/grok plus GROK.md wiring
 #   - fail when grok on PATH is not ~/.local/bin/grok
 #   - fail when a second grok binary is on PATH
-#   - fail when ~/.grok/AGENTS.md is not a symlink to ~/github/agents/GROK.md
+#   - fail when ~/.grok/AGENTS.md is not a symlink to ~/github/agents/GROK.md,
+#     naming the actual target, whether or not GROK.md or the agents repo exists
 #   - check every ~/github/agents/grok/agents/*.md link, whatever the names
 #   - fail on a dangling ~/.grok/agents link whose agents-repo source is gone
 #   - never check ~/.grok/config.toml (Grok owns and rewrites that file)
@@ -165,10 +166,45 @@ plant_wiring "$home"
 plant_grok_bin "$home/.local/bin/grok"
 ln -sfn "$home/AGENTS.md" "$home/.grok/AGENTS.md"
 section=$(run_section7 "$home")
-assert_grep "$section" 'FAIL  grok: ~/.grok/AGENTS.md is not a symlink to ~/github/agents/GROK.md' \
-  "fails when ~/.grok/AGENTS.md is not linked to GROK.md"
+assert_grep "$section" "FAIL  grok: ~/.grok/AGENTS.md points at $home/AGENTS\.md, not ~/github/agents/GROK\.md \(run: ic-link\)" \
+  "fails naming Claude's manual as the target when ~/.grok/AGENTS.md points at it"
 assert_line_count "$section" 'FAIL .*\.grok/AGENTS\.md' 1 \
   "a mislinked ~/.grok/AGENTS.md yields exactly one FAIL line"
+
+# --- a missing GROK.md must not hide a link to Claude's manual ---
+home=$(new_home claude-pointer-no-manual)
+plant_wiring "$home"
+plant_grok_bin "$home/.local/bin/grok"
+rm "$home/github/agents/GROK.md"
+ln -sfn "$home/AGENTS.md" "$home/.grok/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" 'FAIL  grok: ~/github/agents/GROK\.md missing' \
+  "reports the missing GROK.md source"
+assert_grep "$section" "FAIL  grok: ~/.grok/AGENTS.md points at $home/AGENTS\.md, not ~/github/agents/GROK\.md \(add ~/github/agents/GROK\.md, then run: ic-link\)" \
+  "still names Claude's manual as the target, as its own line, when GROK.md is missing"
+
+# --- nor must an uncloned agents repo ---
+home=$(new_home claude-pointer-no-repo)
+mkdir -p "$home/.grok"
+plant_grok_skills "$home"
+plant_grok_bin "$home/.local/bin/grok"
+ln -sfn ".claude/CLAUDE.md" "$home/AGENTS.md"
+ln -sfn "$home/AGENTS.md" "$home/.grok/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" "FAIL  grok: ~/.grok/AGENTS.md points at $home/AGENTS\.md, not ~/github/agents/GROK\.md" \
+  "names Claude's manual as the target even when ~/github/agents is not cloned"
+assert_line_count "$section" 'warn  grok: private agents repo not cloned' 1 \
+  "still warns once about the uncloned agents repo"
+
+# --- a regular file is not Grok's versioned manual ---
+home=$(new_home manual-regular-file)
+plant_wiring "$home"
+plant_grok_bin "$home/.local/bin/grok"
+rm "$home/.grok/AGENTS.md"
+printf '%s\n' 'loose manual' >"$home/.grok/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" 'FAIL  grok: ~/.grok/AGENTS.md is missing or not a symlink to ~/github/agents/GROK\.md \(run: ic-link\)' \
+  "fails when ~/.grok/AGENTS.md is a regular file"
 
 # --- any version string is accepted at the official path ---
 home=$(new_home other-channel)
@@ -224,6 +260,8 @@ rm -rf "$home/github/agents/GROK.md" "$home/github/agents/grok/agents"
 section=$(run_section7 "$home")
 assert_grep "$section" 'FAIL  grok: ~/github/agents/GROK\.md missing' \
   "names the missing GROK.md source file"
+assert_line_count "$section" 'FAIL .*\.grok/AGENTS\.md' 0 \
+  "does not blame a ~/.grok/AGENTS.md that already points at GROK.md for the missing source"
 assert_grep "$section" 'FAIL  grok: no agent definitions at ~/github/agents/grok/agents/\*\.md' \
   "names the missing grok/agents source"
 assert_grep "$section" 'FAIL  grok: dangling agent links, source gone from ~/github/agents/grok/agents: implementer\.md reviewer\.md \(remove: cd ~/.grok/agents && rm implementer\.md reviewer\.md\)' \

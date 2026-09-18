@@ -118,7 +118,8 @@ It covers:
 - `~/.grok` absent: one skip warning and no Grok FAIL
 - a healthy install: the binary, the `GROK.md` link, the "Default development system" section, the skill mirrors, and the agent definitions all `ok`, with a Grok-owned regular `~/.grok/config.toml` never mentioned and the Claude personal-layer check unaffected by `~/.grok`
 - `grok` resolving outside `~/.local/bin`, and a second `grok` on PATH: both FAIL, the latter naming the copy to keep and the `npm uninstall` that drops the other
-- `~/.grok/AGENTS.md` pointing at Claude's file: exactly one FAIL line
+- `~/.grok/AGENTS.md` pointing at Claude's file: exactly one FAIL line, naming the actual target; the same FAIL must still appear, as its own line beside the missing-source FAIL, when `GROK.md` is absent (the state a machine wired by this branch's first commits is in until `GROK.md` is added), and when `~/github/agents` is not cloned at all
+- `~/.grok/AGENTS.md` as a regular file: FAIL, since only a link to `GROK.md` is Grok's versioned manual
 - a version line with an unrecognised channel label: accepted, since the official binary is identified by location alone
 - an agent definition renamed in the agents repo: FAIL naming the unlinked file, then `ok` once linked, with no fixed list of expected names; the old link the rename leaves dangling is a separate FAIL naming it and the `rm` that clears it (`ic-link` never deletes inside `~/.grok`), and a dangling link that never pointed into the agents repo is ignored
 - Grok installed with `~/github/agents` not cloned: exactly one Grok warning, the skill mirrors still checked, and no Grok FAIL
