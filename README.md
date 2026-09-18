@@ -309,25 +309,33 @@ Logs land in `~/github/.fleet/logs/` with 30-day rotation, and a desktop notific
 `files/bin/ic-doctor` is the read-only health check for the whole system; run it whenever something feels off or after changing the setup.
 
 **6. Cross-tool defaults.**
-`~/.claude/CLAUDE.md` is the single source of truth for agent instructions, and its "Default development system" section makes firstmate the default entry point for all AI work and this toolchain the default for every development request.
+`~/.claude/CLAUDE.md` is Claude Code's operating manual and the cross-tool default at `~/AGENTS.md`.
+Its "Default development system" section makes firstmate the default entry point for all AI work and this toolchain the default for every development request.
 An agent in a plain session outside firstmate points at `fm` once before working directly.
-Other tools reach the same instructions and skills through symlinks:
+Codex reaches the same instructions through `~/AGENTS.md`.
+Grok Build has its own files, versioned next to Claude's in the private agents repo:
 
 ```text
-~/AGENTS.md               -> .claude/CLAUDE.md
-~/.codex/AGENTS.md        -> ~/AGENTS.md
-~/.grok/AGENTS.md         -> ~/AGENTS.md   (only when ~/.grok exists)
-~/.codex/skills/<name>    -> ../../.agents/skills/<name>
+~/AGENTS.md                 -> .claude/CLAUDE.md
+~/.codex/AGENTS.md          -> ~/AGENTS.md
+~/.codex/skills/<name>      -> ../../.agents/skills/<name>
+~/.grok/AGENTS.md           -> ~/github/agents/GROK.md     (only when ~/.grok exists)
+~/.grok/config.toml         -> ~/github/agents/grok/config.toml
+~/.grok/agents/<name>.md    -> ~/github/agents/grok/agents/<name>.md
+~/.grok/skills/<name>       -> ../../.agents/skills/<name>
 ```
 
-So Claude Code, Codex, Grok, and anything else that reads `AGENTS.md` all see one set of rules and one set of skills.
-Grok needs no skill mirror: it scans `~/.claude/skills` natively, and reads its global rules from `~/.grok`.
+Claude Code and Codex share `CLAUDE.md`.
+Grok does not: `GROK.md` is a separate operating manual with the same shared rules plus Grok-only wiring.
+`ic-link` never points `~/.grok/AGENTS.md` at Claude's file, never creates `~/.grok` (the Grok installer owns that directory), and never touches `~/.grok/hooks/` (firstmate owns the turn-end hook).
 Cursor is not installed on this machine; when it is, point its User Rules at `~/AGENTS.md` (or symlink a project's `.cursor/rules` to it) to join the same system.
 
 The personal layer itself is version controlled in a **private** repo, `~/github/agents`, so nothing exists only as loose files in the home directory:
 
 ```text
 ~/.claude/CLAUDE.md      -> ~/github/agents/CLAUDE.md
+~/.grok/AGENTS.md        -> ~/github/agents/GROK.md
+~/.grok/config.toml      -> ~/github/agents/grok/config.toml
 ~/OPINIONS.md            -> ~/github/agents/OPINIONS.md
 ~/VOICE.md               -> ~/github/agents/VOICE.md
 ~/.claude/settings.json  -> ~/github/agents/claude/settings.json
@@ -351,7 +359,7 @@ This is the full map; if something is installed and not listed here, it is unman
 | Desktop layer | `nix/home/desktop.nix` | fonts (Hack Nerd Font, Roboto, Noto, Font Awesome) and the linked WezTerm and herdr configs |
 | Manual Homebrew | `brew` (not yet declared in nix) | formulas `node`, `go`, `gh`; casks `google-chrome` (required by chrome-devtools-axi), `codex` |
 | npm globals | `npm install -g` | `pnpm` (build tool for all Node forks) |
-| Native installers | vendor scripts | `claude` (Claude Code, `curl -fsSL https://claude.ai/install.sh \| bash`) |
+| Native installers | vendor scripts | `claude` (Claude Code, `curl -fsSL https://claude.ai/install.sh \| bash`); `grok` (xAI Grok Build, `curl -fsSL https://x.ai/cli/install.sh \| bash`, binary at `~/.local/bin/grok`) |
 | Go builds | `sync-forks` / manual | `no-mistakes`, `treehouse` into `~/go/bin` |
 | npm links | `sync-forks` / manual | `chrome-devtools-axi`, `gh-axi`, `gnhf`, `lavish-axi`, `quota-axi`, `tasks-axi` |
 | Skills installer | `npx skills` | third-party skills: `deploy-to-vercel`, `find-skills`, `vercel-*`, `web-design-guidelines`, `writing-guidelines` |
@@ -448,7 +456,7 @@ The agent operating manual (`CLAUDE.md` with its "Default development system" se
 git clone https://github.com/<you>/agents.git ~/github/agents
 ```
 
-If you are reproducing this setup for yourself, create that private repo first with your own `CLAUDE.md`; this repo's `files/skills/ship/SKILL.md` and the layer descriptions above tell you what it needs to contain.
+If you are reproducing this setup for yourself, create that private repo first with your own `CLAUDE.md` and `GROK.md`; this repo's `files/skills/ship/SKILL.md` and the layer descriptions above tell you what they need to contain.
 
 **Step 6: wire every symlink with one command.**
 
@@ -456,7 +464,7 @@ If you are reproducing this setup for yourself, create that private repo first w
 ic-link
 ```
 
-`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills` and `~/.codex/skills`, the `~/AGENTS.md`, `~/.codex/AGENTS.md`, and (when Grok is installed) `~/.grok/AGENTS.md` chain, and the personal-layer links from `~/github/agents` (skipped with a note if that repo is absent).
+`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills`, `~/.codex/skills`, and (when Grok is installed) `~/.grok/skills`, the `~/AGENTS.md` and `~/.codex/AGENTS.md` chain, Grok's own `AGENTS.md` / config / agent definitions from `~/github/agents`, and the rest of the personal-layer links (skipped with a note if that repo is absent).
 Rerun it any time; it repairs stale links in place.
 
 **Step 7: enable the daily sync.**
@@ -483,6 +491,7 @@ firstmate is the default way in for all AI work and runs from inside its workspa
 
 ```bash
 fm          # cd ~/github/firstmate and launch Claude Code as the first mate
+fm grok     # same, with Grok as the primary (coding quota fallback)
 fm pi       # same, with another verified primary harness
 cdfm        # just jump to the workspace (fleet alias)
 ```
@@ -511,7 +520,7 @@ npx skills add <owner>/<repo> --skill <name> -g   # -g = all projects (~/.claude
 ic-doctor
 ```
 
-`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the daily sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md` and skills, and grok `AGENTS.md`).
+`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the daily sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md` and skills, and Grok's separate `AGENTS.md`, config, skills, and agent definitions).
 Checks that do not apply to a platform are reported as such rather than failed: WSL has no desktop layer, so the linked terminal configs are not expected there, and its sync timer is left disabled because systemd is off by default.
 It exits non-zero if anything needs attention, and every failure line names the command that fixes it.
 A healthy system ends with `ic-doctor: all checks passed`.

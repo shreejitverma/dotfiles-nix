@@ -3,10 +3,10 @@
 #
 # Idempotent: safe to run any time; ln -sfn replaces stale links in place.
 # This is the versioned recipe for the wiring that ic-doctor verifies:
-#   - agent skills into ~/.agents/skills, mirrored to ~/.claude/skills
-#     and ~/.codex/skills
-#   - the cross-tool instruction chain (~/AGENTS.md, ~/.codex/AGENTS.md, and
-#     ~/.grok/AGENTS.md when Grok is installed)
+#   - agent skills into ~/.agents/skills, mirrored to ~/.claude/skills,
+#     ~/.codex/skills, and ~/.grok/skills (when Grok is installed)
+#   - the cross-tool instruction chain (~/AGENTS.md, ~/.codex/AGENTS.md)
+#   - Grok's own AGENTS.md, config.toml, and agent definitions (never Claude's)
 #   - the personal layer from the private ~/github/agents repo, if present
 set -euo pipefail
 
@@ -76,11 +76,6 @@ done
 # 3. Cross-tool instruction chain.
 ln -sfn ".claude/CLAUDE.md" "$HOME/AGENTS.md"
 ln -sfn "$HOME/AGENTS.md"   "$HOME/.codex/AGENTS.md"
-# Grok reads global rules from ~/.grok and skills from ~/.claude/skills, so the
-# rules link is its only wiring. Its installer owns ~/.grok; never create it.
-if [ -d "$HOME/.grok" ]; then
-  ln -sfn "$HOME/AGENTS.md" "$HOME/.grok/AGENTS.md"
-fi
 
 # 4. Personal layer from the private agents repo (skipped if not cloned).
 AGENTS_REPO="$GH_ROOT/agents"
@@ -89,6 +84,40 @@ if [ -d "$AGENTS_REPO" ]; then
   ln -sf "$AGENTS_REPO/OPINIONS.md"          "$HOME/OPINIONS.md"
   ln -sf "$AGENTS_REPO/VOICE.md"             "$HOME/VOICE.md"
   ln -sf "$AGENTS_REPO/claude/settings.json" "$HOME/.claude/settings.json"
+  personal_layer=1
+else
+  personal_layer=0
+fi
+
+# 5. Grok Build: separate agent files, never Claude's AGENTS.md.
+# The Grok installer owns ~/.grok; never create that directory.
+# Firstmate owns ~/.grok/hooks; never create, replace, or empty it.
+if [ -d "$HOME/.grok" ]; then
+  mkdir -p "$HOME/.grok/skills" "$HOME/.grok/agents"
+  for s in $ALL_SKILLS; do
+    ln -sfn "../../.agents/skills/$s" "$HOME/.grok/skills/$s"
+  done
+  if [ "$personal_layer" -eq 1 ]; then
+    if [ -f "$AGENTS_REPO/GROK.md" ]; then
+      ln -sf "$AGENTS_REPO/GROK.md" "$HOME/.grok/AGENTS.md"
+    else
+      echo "ic-link: warning: $AGENTS_REPO/GROK.md missing; not pointing ~/.grok/AGENTS.md at Claude's file" >&2
+    fi
+    if [ -f "$AGENTS_REPO/grok/config.toml" ]; then
+      ln -sf "$AGENTS_REPO/grok/config.toml" "$HOME/.grok/config.toml"
+    else
+      echo "ic-link: warning: $AGENTS_REPO/grok/config.toml missing; leaving ~/.grok/config.toml unchanged" >&2
+    fi
+    if [ -d "$AGENTS_REPO/grok/agents" ]; then
+      for f in "$AGENTS_REPO"/grok/agents/*.md; do
+        [ -f "$f" ] || continue
+        ln -sf "$f" "$HOME/.grok/agents/$(basename "$f")"
+      done
+    fi
+  fi
+fi
+
+if [ "$personal_layer" -eq 1 ]; then
   echo "ic-link: linked skills, cross-tool chain, and personal layer"
 else
   echo "ic-link: linked skills and cross-tool chain (no $AGENTS_REPO; personal layer skipped)"
