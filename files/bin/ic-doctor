@@ -294,6 +294,16 @@ if [ -d "$HOME/.grok" ]; then
     else
       ok "grok: $grok_agents_n agent definitions linked from ~/github/agents/grok/agents"
     fi
+    grok_agents_stale=""
+    for f in "$HOME"/.grok/agents/*; do
+      [ -L "$f" ] && [ ! -e "$f" ] || continue
+      case "$(readlink "$f")" in
+        "$GH_ROOT"/agents/grok/agents/*) grok_agents_stale="$grok_agents_stale $(basename "$f")" ;;
+      esac
+    done
+    if [ "$grok_agents_n" -gt 0 ] && [ -n "$grok_agents_stale" ]; then
+      bad "grok: dangling agent links, source gone from ~/github/agents/grok/agents:$grok_agents_stale (remove: cd ~/.grok/agents && rm$grok_agents_stale)"
+    fi
   else
     warn "grok: private agents repo not cloned (~/github/agents); AGENTS.md and agent definitions not checked"
   fi
@@ -302,8 +312,7 @@ else
 fi
 if [ -d "$GH_ROOT/agents" ]; then
   agents_bad=""
-  personal_files="$HOME/.claude/CLAUDE.md $HOME/OPINIONS.md $HOME/VOICE.md $HOME/.claude/settings.json"
-  for f in $personal_files; do
+  for f in "$HOME/.claude/CLAUDE.md" "$HOME/OPINIONS.md" "$HOME/VOICE.md" "$HOME/.claude/settings.json"; do
     case "$(readlink "$f" 2>/dev/null)" in
       "$GH_ROOT"/agents/*) ;;
       *) agents_bad="$agents_bad $f" ;;

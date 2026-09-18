@@ -66,7 +66,7 @@ seed_agents_repo() {
 
 run_link() {
   local home="$1"
-  if ! HOME="$home" "$REPO_ROOT/files/bin/ic-link"; then
+  if ! HOME="$home" "$REPO_ROOT/files/bin/ic-link" >/dev/null; then
     fail "ic-link exited non-zero for $home"
     return 1
   fi
@@ -75,14 +75,14 @@ run_link() {
 # --- never create ~/.grok ---
 home=$(new_home no-grok)
 seed_agents_repo "$home"
-run_link "$home" >/dev/null
+run_link "$home"
 assert_no_path "$home/.grok" "ic-link does not create ~/.grok when the installer has not"
 
 # --- never create ~/.grok/hooks ---
 home=$(new_home grok-no-hooks)
 seed_agents_repo "$home"
 mkdir -p "$home/.grok"
-run_link "$home" >/dev/null
+run_link "$home"
 assert_no_path "$home/.grok/hooks" "ic-link does not create ~/.grok/hooks when firstmate has not"
 if [ -e "$home/.grok/config.toml" ] || [ -L "$home/.grok/config.toml" ]; then
   fail "ic-link created ~/.grok/config.toml"
@@ -97,7 +97,7 @@ mkdir -p "$home/.grok/hooks"
 printf '%s\n' '{"keep":true}' >"$home/.grok/hooks/fm-keep.json"
 printf '%s\n' 'stale-claude-pointer' >"$home/.grok/AGENTS.md"
 printf '%s\n' 'auto_update = true' >"$home/.grok/config.toml"
-run_link "$home" >/dev/null
+run_link "$home"
 
 assert_eq "$(readlink "$home/.grok/AGENTS.md")" "$home/github/agents/GROK.md" \
   "\$HOME/.grok/AGENTS.md points at GROK.md, not Claude's file"

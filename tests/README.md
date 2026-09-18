@@ -120,6 +120,6 @@ It covers:
 - `grok` resolving outside `~/.local/bin`, and a second `grok` on PATH: both FAIL, the latter naming the copy to keep and the `npm uninstall` that drops the other
 - `~/.grok/AGENTS.md` pointing at Claude's file: exactly one FAIL line
 - a version line with an unrecognised channel label: accepted, since the official binary is identified by location alone
-- an agent definition renamed in the agents repo: FAIL naming the unlinked file, then `ok` once linked, with no fixed list of expected names
+- an agent definition renamed in the agents repo: FAIL naming the unlinked file, then `ok` once linked, with no fixed list of expected names; the old link the rename leaves dangling is a separate FAIL naming it and the `rm` that clears it (`ic-link` never deletes inside `~/.grok`), and a dangling link that never pointed into the agents repo is ignored
 - Grok installed with `~/github/agents` not cloned: exactly one Grok warning, the skill mirrors still checked, and no Grok FAIL
 - an agents repo lacking `GROK.md` and `grok/agents`: each FAIL names the missing source rather than offering `run: ic-link`, which would be a no-op there

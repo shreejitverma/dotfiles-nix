@@ -522,6 +522,7 @@ ic-doctor
 ```
 
 `ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the daily sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md` and skills, and Grok's separate `AGENTS.md`, skills, and agent definitions, plus the `grok` binary resolving to `~/.local/bin/grok` with no second copy on `PATH`).
+A link in `~/.grok/agents` left dangling because its definition was renamed or removed in the agents repo is a FAIL that names the link and the `rm` that clears it; `ic-link` only writes its own links and never deletes inside `~/.grok`.
 When Grok is installed but `~/github/agents` is not cloned, the repo-backed Grok checks are skipped with a single warning, the same way the Claude personal layer is.
 Checks that do not apply to a platform are reported as such rather than failed: WSL has no desktop layer, so the linked terminal configs are not expected there, and its sync timer is left disabled because systemd is off by default.
 It exits non-zero if anything needs attention, and every failure line names the command that fixes it.

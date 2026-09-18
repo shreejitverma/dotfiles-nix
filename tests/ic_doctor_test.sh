@@ -9,6 +9,7 @@
 #   - fail when a second grok binary is on PATH
 #   - fail when ~/.grok/AGENTS.md is not a symlink to ~/github/agents/GROK.md
 #   - check every ~/github/agents/grok/agents/*.md link, whatever the names
+#   - fail on a dangling ~/.grok/agents link whose agents-repo source is gone
 #   - never check ~/.grok/config.toml (Grok owns and rewrites that file)
 #   - warn once, without failing, when ~/github/agents is not cloned
 #   - name the missing source when the agents repo lacks GROK.md or grok/agents
@@ -184,7 +185,6 @@ home=$(new_home renamed-agent)
 plant_wiring "$home"
 plant_grok_bin "$home/.local/bin/grok"
 mv "$home/github/agents/grok/agents/reviewer.md" "$home/github/agents/grok/agents/auditor.md"
-rm "$home/.grok/agents/reviewer.md"
 section=$(run_section7 "$home")
 assert_grep "$section" 'FAIL  grok: agent definitions not linked: auditor\.md \(run: ic-link\)' \
   "fails naming an agent definition that is in the repo but not linked"
@@ -192,6 +192,13 @@ ln -sf "$home/github/agents/grok/agents/auditor.md" "$home/.grok/agents/auditor.
 section=$(run_section7 "$home")
 assert_grep "$section" 'ok    grok: 2 agent definitions linked' \
   "accepts a renamed agent definition once it is linked"
+assert_grep "$section" 'FAIL  grok: dangling agent links, source gone from ~/github/agents/grok/agents: reviewer\.md \(remove: cd ~/.grok/agents && rm reviewer\.md\)' \
+  "fails naming the dangling link a rename leaves behind, with the command that removes it"
+rm "$home/.grok/agents/reviewer.md"
+ln -s "$home/elsewhere/mine.md" "$home/.grok/agents/mine.md"
+section=$(run_section7 "$home")
+assert_not_grep "$section" 'FAIL  (grok|GROK)' \
+  "passes once the dangling link is removed, ignoring a dangling link that never pointed into the agents repo"
 assert_not_grep "$section" 'reviewer' \
   "does not expect an agent name the repo no longer has"
 
