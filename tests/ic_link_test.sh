@@ -75,6 +75,13 @@ seed_agents_repo "$home"
 run_link "$home" >/dev/null
 assert_no_path "$home/.grok" "ic-link does not create ~/.grok when the installer has not"
 
+# --- never create ~/.grok/hooks ---
+home=$(new_home grok-no-hooks)
+seed_agents_repo "$home"
+mkdir -p "$home/.grok"
+run_link "$home" >/dev/null
+assert_no_path "$home/.grok/hooks" "ic-link does not create ~/.grok/hooks when firstmate has not"
+
 # --- full Grok personal layer ---
 home=$(new_home grok-full)
 seed_agents_repo "$home"

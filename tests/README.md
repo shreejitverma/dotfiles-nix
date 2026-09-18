@@ -5,12 +5,13 @@ bash tests/mac_setup_test.sh        # setup/mac.sh, stubbed
 bash tests/install_dispatch_test.sh # setup/install.sh detection and dispatch, stubbed
 bash tests/sync_forks_test.sh       # files/bin/sync-forks, sandboxed git fixtures
 bash tests/ic_link_test.sh          # files/bin/ic-link Grok personal-layer wiring, sandboxed HOME
+bash tests/ic_doctor_test.sh        # files/bin/ic-doctor Grok binary and personal-layer checks, sandboxed HOME
 bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
 
 All but the last never install anything and run anywhere.
 `linux_e2e_docker.sh` needs Docker and skips itself when Docker is unavailable.
-All five honour `DEBUG_KEEP_SANDBOX=1`, which leaves the scratch directory each one works in (per scenario, for `mac_setup_test.sh`) on disk for inspection after a failing run instead of removing it on exit.
+All six honour `DEBUG_KEEP_SANDBOX=1`, which leaves the scratch directory each one works in (per scenario, for `mac_setup_test.sh`) on disk for inspection after a failing run instead of removing it on exit.
 
 `mac_setup_test.sh` is a regression test for `setup/mac.sh`.
 It never runs the script against the real machine, since that script installs Nix and activates a real `nix-darwin` system.
