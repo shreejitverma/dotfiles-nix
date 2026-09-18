@@ -18,6 +18,7 @@ set -uo pipefail
 REPO_ROOT="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd .. && pwd)"
 SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/ic-link-test.XXXXXX")"
 
+# shellcheck disable=SC2329  # invoked by the EXIT trap
 cleanup() {
   if [ "${DEBUG_KEEP_SANDBOX:-0}" = "1" ]; then
     echo "DEBUG_KEEP_SANDBOX=1: sandbox left at $SANDBOX"
@@ -92,9 +93,9 @@ printf '%s\n' 'stale-config' >"$home/.grok/config.toml"
 run_link "$home" >/dev/null
 
 assert_eq "$(readlink "$home/.grok/AGENTS.md")" "$home/github/agents/GROK.md" \
-  "~/.grok/AGENTS.md points at GROK.md, not Claude's file"
+  "\$HOME/.grok/AGENTS.md points at GROK.md, not Claude's file"
 assert_eq "$(readlink "$home/.grok/config.toml")" "$home/github/agents/grok/config.toml" \
-  "~/.grok/config.toml points at the versioned grok config"
+  "\$HOME/.grok/config.toml points at the versioned grok config"
 assert_eq "$(readlink "$home/.grok/agents/implementer.md")" "$home/github/agents/grok/agents/implementer.md" \
   "implementer agent definition is linked"
 assert_eq "$(readlink "$home/.grok/agents/reviewer.md")" "$home/github/agents/grok/agents/reviewer.md" \

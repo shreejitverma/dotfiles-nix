@@ -20,6 +20,7 @@ REPO_ROOT="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd .. && pwd)"
 SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/ic-doctor-test.XXXXXX")"
 SKILLS="axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi ship stow tasks-axi"
 
+# shellcheck disable=SC2329  # invoked by the EXIT trap
 cleanup() {
   if [ "${DEBUG_KEEP_SANDBOX:-0}" = "1" ]; then
     echo "DEBUG_KEEP_SANDBOX=1: sandbox left at $SANDBOX"
@@ -87,7 +88,8 @@ plant_wiring() {
 
 run_section7() {
   local home="$1"
-  local log="$SANDBOX/$(basename "$home").log"
+  local log
+  log="$SANDBOX/$(basename "$home").log"
   env -u NVM_DIR HOME="$home" "$REPO_ROOT/files/bin/ic-doctor" >"$log" 2>&1 || true
   awk '/\[7\/7\]/,0' "$log"
 }
