@@ -13,7 +13,8 @@
 #   - fail on a dangling ~/.grok/agents link whose agents-repo source is gone
 #   - never check ~/.grok/config.toml (Grok owns and rewrites that file)
 #   - warn once, without failing, when ~/github/agents is not cloned
-#   - name the missing source when the agents repo lacks GROK.md or grok/agents
+#   - name the missing source when the agents repo lacks GROK.md (FAIL) or
+#     grok/agents (warn only: agent definitions are optional)
 #
 # Other ic-doctor sections (checkout path, forks, host binaries) still run and
 # may FAIL; this suite only asserts the Grok lines in section 7.
@@ -252,6 +253,18 @@ assert_grep "$section" 'ok    grok: all skills linked' \
 assert_not_grep "$section" 'FAIL  (grok|GROK)' \
   "does not FAIL grok checks when ~/github/agents is not cloned"
 
+# --- agents repo as the README describes it: GROK.md, no grok/agents ---
+home=$(new_home no-grok-agents)
+plant_wiring "$home"
+plant_grok_bin "$home/.local/bin/grok"
+rm -rf "$home/github/agents/grok/agents"
+rm "$home/.grok/agents/implementer.md" "$home/.grok/agents/reviewer.md"
+section=$(run_section7 "$home")
+assert_line_count "$section" 'warn  grok: no agent definitions at ~/github/agents/grok/agents/\*\.md' 1 \
+  "warns once when the agents repo has no grok/agents"
+assert_not_grep "$section" 'FAIL  (grok|GROK)' \
+  "passes the Grok checks without any agent definitions"
+
 # --- agents repo present but missing the Grok sources ---
 home=$(new_home no-grok-sources)
 plant_wiring "$home"
@@ -262,8 +275,10 @@ assert_grep "$section" 'FAIL  grok: ~/github/agents/GROK\.md missing' \
   "names the missing GROK.md source file"
 assert_line_count "$section" 'FAIL .*\.grok/AGENTS\.md' 0 \
   "does not blame a ~/.grok/AGENTS.md that already points at GROK.md for the missing source"
-assert_grep "$section" 'FAIL  grok: no agent definitions at ~/github/agents/grok/agents/\*\.md' \
-  "names the missing grok/agents source"
+assert_line_count "$section" 'warn  grok: no agent definitions at ~/github/agents/grok/agents/\*\.md' 1 \
+  "warns once, naming the missing grok/agents source"
+assert_not_grep "$section" 'FAIL  grok: no agent definitions' \
+  "does not FAIL on the absent optional grok/agents source"
 assert_grep "$section" 'FAIL  grok: dangling agent links, source gone from ~/github/agents/grok/agents: implementer\.md reviewer\.md \(remove: cd ~/.grok/agents && rm implementer\.md reviewer\.md\)' \
   "names every link left dangling when the repo has no agent definitions at all"
 assert_not_grep "$section" 'FAIL  (grok|GROK)[^(]*\(run: ic-link\)' \

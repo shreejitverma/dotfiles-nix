@@ -295,7 +295,7 @@ if [ -d "$HOME/.grok" ]; then
       [ "$(readlink "$HOME/.grok/agents/$a" 2>/dev/null)" = "$f" ] || grok_agents_bad="$grok_agents_bad $a"
     done
     if [ "$grok_agents_n" -eq 0 ]; then
-      bad "grok: no agent definitions at ~/github/agents/grok/agents/*.md (add them to the agents repo, then run: ic-link)"
+      warn "grok: no agent definitions at ~/github/agents/grok/agents/*.md; none to link"
     elif [ -n "$grok_agents_bad" ]; then
       bad "grok: agent definitions not linked:$grok_agents_bad (run: ic-link)"
     else
