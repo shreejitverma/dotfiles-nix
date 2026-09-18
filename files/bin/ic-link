@@ -5,7 +5,8 @@
 # This is the versioned recipe for the wiring that ic-doctor verifies:
 #   - agent skills into ~/.agents/skills, mirrored to ~/.claude/skills
 #     and ~/.codex/skills
-#   - the cross-tool instruction chain (~/AGENTS.md, ~/.codex/AGENTS.md)
+#   - the cross-tool instruction chain (~/AGENTS.md, ~/.codex/AGENTS.md, and
+#     ~/.grok/AGENTS.md when Grok is installed)
 #   - the personal layer from the private ~/github/agents repo, if present
 set -euo pipefail
 
@@ -75,6 +76,11 @@ done
 # 3. Cross-tool instruction chain.
 ln -sfn ".claude/CLAUDE.md" "$HOME/AGENTS.md"
 ln -sfn "$HOME/AGENTS.md"   "$HOME/.codex/AGENTS.md"
+# Grok reads global rules from ~/.grok and skills from ~/.claude/skills, so the
+# rules link is its only wiring. Its installer owns ~/.grok; never create it.
+if [ -d "$HOME/.grok" ]; then
+  ln -sfn "$HOME/AGENTS.md" "$HOME/.grok/AGENTS.md"
+fi
 
 # 4. Personal layer from the private agents repo (skipped if not cloned).
 AGENTS_REPO="$GH_ROOT/agents"

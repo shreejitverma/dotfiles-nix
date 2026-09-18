@@ -316,10 +316,12 @@ Other tools reach the same instructions and skills through symlinks:
 ```text
 ~/AGENTS.md               -> .claude/CLAUDE.md
 ~/.codex/AGENTS.md        -> ~/AGENTS.md
+~/.grok/AGENTS.md         -> ~/AGENTS.md   (only when ~/.grok exists)
 ~/.codex/skills/<name>    -> ../../.agents/skills/<name>
 ```
 
-So Claude Code, Codex, and anything else that reads `AGENTS.md` all see one set of rules and one set of skills.
+So Claude Code, Codex, Grok, and anything else that reads `AGENTS.md` all see one set of rules and one set of skills.
+Grok needs no skill mirror: it scans `~/.claude/skills` natively, and reads its global rules from `~/.grok`.
 Cursor is not installed on this machine; when it is, point its User Rules at `~/AGENTS.md` (or symlink a project's `.cursor/rules` to it) to join the same system.
 
 The personal layer itself is version controlled in a **private** repo, `~/github/agents`, so nothing exists only as loose files in the home directory:
@@ -454,7 +456,7 @@ If you are reproducing this setup for yourself, create that private repo first w
 ic-link
 ```
 
-`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills` and `~/.codex/skills`, the `~/AGENTS.md` and `~/.codex/AGENTS.md` chain, and the personal-layer links from `~/github/agents` (skipped with a note if that repo is absent).
+`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills` and `~/.codex/skills`, the `~/AGENTS.md`, `~/.codex/AGENTS.md`, and (when Grok is installed) `~/.grok/AGENTS.md` chain, and the personal-layer links from `~/github/agents` (skipped with a note if that repo is absent).
 Rerun it any time; it repairs stale links in place.
 
 **Step 7: enable the daily sync.**
@@ -509,7 +511,7 @@ npx skills add <owner>/<repo> --skill <name> -g   # -g = all projects (~/.claude
 ic-doctor
 ```
 
-`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the daily sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md`, and codex skills).
+`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the daily sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md` and skills, and grok `AGENTS.md`).
 Checks that do not apply to a platform are reported as such rather than failed: WSL has no desktop layer, so the linked terminal configs are not expected there, and its sync timer is left disabled because systemd is off by default.
 It exits non-zero if anything needs attention, and every failure line names the command that fixes it.
 A healthy system ends with `ic-doctor: all checks passed`.
