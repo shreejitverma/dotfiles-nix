@@ -241,7 +241,9 @@ else
 fi
 if [ -d "$HOME/.grok" ]; then
   if p=$(command -v grok 2>/dev/null); then
-    if v=$(grok --version 2>/dev/null | head -1); then
+    if [ "$p" != "$HOME/.local/bin/grok" ]; then
+      bad "grok on PATH is $p, want ~/.local/bin/grok (official installer; npm uninstall -g @xai-official/grok)"
+    elif v=$(grok --version 2>/dev/null | head -1); then
       case "$v" in
         grok\ *\[stable\]|grok\ *\[beta\]|grok\ *\[nightly\]) ok "grok $v" ;;
         *) bad "grok at $p is not xAI Grok Build (got: $v)" ;;
@@ -251,7 +253,7 @@ if [ -d "$HOME/.grok" ]; then
     fi
     dups=$(type -a grok 2>/dev/null | grep -c "is /" || true)
     if [ "$dups" -gt 1 ]; then
-      warn "grok: $dups copies on PATH: $(type -a grok | awk '/is \// {print $NF}' | tr '\n' ' ')"
+      bad "grok: $dups copies on PATH: $(type -a grok | awk '/is \// {print $NF}' | tr '\n' ' ')(keep ~/.local/bin/grok; npm uninstall -g @xai-official/grok)"
     fi
   else
     bad "grok: ~/.grok exists but grok is not on PATH"
