@@ -401,6 +401,7 @@ And the AI coding tools themselves:
 ```bash
 curl -fsSL https://claude.ai/install.sh | bash   # Claude Code -> ~/.local/bin/claude
 brew install --cask codex                        # Codex CLI
+curl -fsSL https://x.ai/cli/install.sh | bash    # Grok Build (xAI) -> ~/.local/bin/grok
 ```
 
 **Step 1: authenticate GitHub and create the commit-signing key.**
@@ -525,7 +526,7 @@ ic-doctor
 A `~/.grok/AGENTS.md` that points anywhere other than `GROK.md` is a FAIL naming the actual target, reported whether or not `GROK.md` or the agents repo exists, because one tool silently loading another tool's operating manual is the fault this layer exists to prevent.
 Agent definitions are optional: an agents repo with no `grok/agents/*.md` is only a warning, while a definition that exists but is not linked is a FAIL.
 A link in `~/.grok/agents` left dangling because its definition was renamed or removed in the agents repo is a FAIL that names the link and the `rm` that clears it; `ic-link` only writes its own links and never deletes inside `~/.grok`.
-When Grok is installed but `~/github/agents` is not cloned, the repo-backed Grok checks are skipped with a single warning, the same way the Claude personal layer is.
+When Grok is installed but `~/github/agents` is not cloned, the remaining repo-backed Grok checks are skipped with a single warning, the same way the Claude personal layer is.
 Checks that do not apply to a platform are reported as such rather than failed: WSL has no desktop layer, so the linked terminal configs are not expected there, and its sync timer is left disabled because systemd is off by default.
 It exits non-zero if anything needs attention, and every failure line names the command that fixes it.
 A healthy system ends with `ic-doctor: all checks passed`.
