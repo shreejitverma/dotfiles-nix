@@ -10,7 +10,7 @@
 #      timer on Linux) and the newest fleet sync log
 #   6. auth (gh, quota-axi keychain access)
 #   7. cross-tool defaults (~/AGENTS.md chain, codex AGENTS.md and skills,
-#      grok AGENTS.md / config / skills / binary)
+#      grok AGENTS.md / agent definitions / skills / binary)
 #
 # Read-only: it never mutates anything. Exits non-zero if any check FAILs;
 # warns are informational and do not affect the exit code.
@@ -244,10 +244,7 @@ if [ -d "$HOME/.grok" ]; then
     if [ "$p" != "$HOME/.local/bin/grok" ]; then
       bad "grok on PATH is $p, want ~/.local/bin/grok (official installer; npm uninstall -g @xai-official/grok)"
     elif v=$(grok --version 2>/dev/null | head -1); then
-      case "$v" in
-        grok\ *\[stable\]|grok\ *\[beta\]|grok\ *\[nightly\]) ok "grok $v" ;;
-        *) bad "grok at $p is not xAI Grok Build (got: $v)" ;;
-      esac
+      ok "grok $v"
     else
       bad "grok: on PATH at $p but --version failed"
     fi
@@ -258,19 +255,6 @@ if [ -d "$HOME/.grok" ]; then
   else
     bad "grok: ~/.grok exists but grok is not on PATH"
   fi
-  if [ -f "$HOME/.grok/AGENTS.md" ]; then
-    case "$(readlink "$HOME/.grok/AGENTS.md" 2>/dev/null)" in
-      "$GH_ROOT"/agents/GROK.md) ok "grok: ~/.grok/AGENTS.md -> ~/github/agents/GROK.md" ;;
-      *) bad "grok: ~/.grok/AGENTS.md is not a symlink to ~/github/agents/GROK.md (run: ic-link)" ;;
-    esac
-  else
-    bad "grok: ~/.grok/AGENTS.md missing (run: ic-link)"
-  fi
-  if grep -q "Default development system" "$HOME/.grok/AGENTS.md" 2>/dev/null; then
-    ok "GROK.md declares the default development system"
-  else
-    bad "GROK.md missing the 'Default development system' section"
-  fi
   grok_missing=""
   for s in $SKILLS; do
     [ -f "$HOME/.grok/skills/$s/SKILL.md" ] || grok_missing="$grok_missing $s"
@@ -280,25 +264,38 @@ if [ -d "$HOME/.grok" ]; then
   else
     ok "grok: all skills linked"
   fi
-  if [ -f "$HOME/.grok/config.toml" ]; then
-    case "$(readlink "$HOME/.grok/config.toml" 2>/dev/null)" in
-      "$GH_ROOT"/agents/grok/config.toml) ok "grok: config.toml versioned in ~/github/agents" ;;
-      *) bad "grok: ~/.grok/config.toml is not a symlink to ~/github/agents/grok/config.toml (run: ic-link)" ;;
-    esac
+  if [ -d "$GH_ROOT/agents" ]; then
+    if [ ! -f "$GH_ROOT/agents/GROK.md" ]; then
+      bad "grok: ~/github/agents/GROK.md missing (add it to the agents repo, then run: ic-link)"
+    else
+      if [ "$(readlink "$HOME/.grok/AGENTS.md" 2>/dev/null)" = "$GH_ROOT/agents/GROK.md" ]; then
+        ok "grok: ~/.grok/AGENTS.md -> ~/github/agents/GROK.md"
+      else
+        bad "grok: ~/.grok/AGENTS.md is not a symlink to ~/github/agents/GROK.md (run: ic-link)"
+      fi
+      if grep -q "Default development system" "$GH_ROOT/agents/GROK.md" 2>/dev/null; then
+        ok "GROK.md declares the default development system"
+      else
+        bad "GROK.md missing the 'Default development system' section"
+      fi
+    fi
+    grok_agents_n=0
+    grok_agents_bad=""
+    for f in "$GH_ROOT"/agents/grok/agents/*.md; do
+      [ -f "$f" ] || continue
+      grok_agents_n=$((grok_agents_n + 1))
+      a=$(basename "$f")
+      [ "$(readlink "$HOME/.grok/agents/$a" 2>/dev/null)" = "$f" ] || grok_agents_bad="$grok_agents_bad $a"
+    done
+    if [ "$grok_agents_n" -eq 0 ]; then
+      bad "grok: no agent definitions at ~/github/agents/grok/agents/*.md (add them to the agents repo, then run: ic-link)"
+    elif [ -n "$grok_agents_bad" ]; then
+      bad "grok: agent definitions not linked:$grok_agents_bad (run: ic-link)"
+    else
+      ok "grok: $grok_agents_n agent definitions linked from ~/github/agents/grok/agents"
+    fi
   else
-    bad "grok: ~/.grok/config.toml missing (run: ic-link)"
-  fi
-  grok_agents_bad=""
-  for a in implementer reviewer; do
-    case "$(readlink "$HOME/.grok/agents/$a.md" 2>/dev/null)" in
-      "$GH_ROOT"/agents/grok/agents/"$a".md) ;;
-      *) grok_agents_bad="$grok_agents_bad $a.md" ;;
-    esac
-  done
-  if [ -n "$grok_agents_bad" ]; then
-    bad "grok: agent definitions missing or not linked:$grok_agents_bad (run: ic-link)"
-  else
-    ok "grok: implementer and reviewer agent definitions linked"
+    warn "grok: private agents repo not cloned (~/github/agents); AGENTS.md and agent definitions not checked"
   fi
 else
   warn "grok not set up (~/.grok absent); skipping"
@@ -306,9 +303,6 @@ fi
 if [ -d "$GH_ROOT/agents" ]; then
   agents_bad=""
   personal_files="$HOME/.claude/CLAUDE.md $HOME/OPINIONS.md $HOME/VOICE.md $HOME/.claude/settings.json"
-  if [ -d "$HOME/.grok" ]; then
-    personal_files="$personal_files $HOME/.grok/AGENTS.md $HOME/.grok/config.toml"
-  fi
   for f in $personal_files; do
     case "$(readlink "$f" 2>/dev/null)" in
       "$GH_ROOT"/agents/*) ;;

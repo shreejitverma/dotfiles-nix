@@ -19,6 +19,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - `setup/lib/platform.sh` derives the Home Manager profile names from the `username` literal in `flake.nix` rather than restating them, and `ic_profile_for` returns non-zero for an architecture the flake has no output for. Both failures must stay ahead of the Nix install in `setup/install.sh`, `setup/linux.sh`, and `files/bin/up`; otherwise they resurface as an opaque missing-attribute or system-mismatch error from `nix build`, on a host that already has Nix on it. `IC_FLAKE_USER` is an override for an unreadable `flake.nix`, not the primary source.
 - `programs.bash.enable` belongs in `nix/home/linux.nix`, never in `nix/home/common.nix`. Linux and WSL log in with bash, so without it the session PATH, environment, and aliases exist only in the generated `.zshrc`. `common.nix` is shared with macOS, which already logs in with zsh, and enabling bash there would generate a `.bashrc`/`.profile` that nothing on that machine reads. The bash alias set is `config.programs.zsh.shellAliases` rather than a second copy, so the two cannot drift and the platform-specific `rebuild` alias is inherited; `files/zsh/ic-workflow.zsh` is zsh-only and is deliberately not sourced from bash.
 - `setup/lib/platform.sh` is the single source of truth for platform detection, the literal parsers, log locations, notifications, and the minimal PATH. `setup/install.sh`, `setup/mac.sh`, `setup/linux.sh`, `files/bin/up`, `files/bin/ic-doctor`, `files/bin/ic-link`, and `files/zsh/ic-workflow.zsh` all source it. Do not reintroduce a second copy of that logic in any of them. `ic-workflow.zsh` is sourced by every interactive shell, so it settles macOS from `$OSTYPE` and only sources `platform.sh` elsewhere; resolve the platform once at the top of that file rather than per alias.
+- `files/bin/ic-link` deliberately does not link `~/.grok/config.toml`, and `files/bin/ic-doctor` deliberately does not check it. Grok rewrites that file in place, which replaces a symlink with a regular file: a link there made `ic-doctor` FAIL after any Grok run, and rerunning `ic-link` silently discarded what Grok had written. `~/github/agents/grok/config.toml` is a reference copy only. Do not reintroduce the link or the check, and never let `ic-link` create, overwrite, or delete that file.
 
 ## Cross-platform layout
 
@@ -49,12 +50,14 @@ Earlier sync PRs were squash-merged for exactly this reason; the ancestry was re
 
 ## Testing
 
-Four suites:
+Six suites:
 
 ```bash
 bash tests/mac_setup_test.sh        # setup/mac.sh, stubbed
 bash tests/install_dispatch_test.sh # setup/install.sh detection and dispatch, stubbed
 bash tests/sync_forks_test.sh       # files/bin/sync-forks, sandboxed git fixtures
+bash tests/ic_link_test.sh          # files/bin/ic-link Grok wiring, sandboxed HOME
+bash tests/ic_doctor_test.sh        # files/bin/ic-doctor Grok checks (section 7), sandboxed HOME
 bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
 

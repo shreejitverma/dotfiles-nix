@@ -320,7 +320,6 @@ Grok Build has its own files, versioned next to Claude's in the private agents r
 ~/.codex/AGENTS.md          -> ~/AGENTS.md
 ~/.codex/skills/<name>      -> ../../.agents/skills/<name>
 ~/.grok/AGENTS.md           -> ~/github/agents/GROK.md     (only when ~/.grok exists)
-~/.grok/config.toml         -> ~/github/agents/grok/config.toml
 ~/.grok/agents/<name>.md    -> ~/github/agents/grok/agents/<name>.md
 ~/.grok/skills/<name>       -> ../../.agents/skills/<name>
 ```
@@ -328,6 +327,9 @@ Grok Build has its own files, versioned next to Claude's in the private agents r
 Claude Code and Codex share `CLAUDE.md`.
 Grok does not: `GROK.md` is a separate operating manual with the same shared rules plus Grok-only wiring.
 `ic-link` never points `~/.grok/AGENTS.md` at Claude's file, never creates `~/.grok` (the Grok installer owns that directory), and never touches `~/.grok/hooks/` (firstmate owns the turn-end hook).
+`~/.grok/config.toml` is deliberately not linked: Grok owns that file and rewrites it in place, which replaces any symlink with a regular file.
+`ic-link` never creates, overwrites, or deletes it, and `ic-doctor` does not check it.
+`~/github/agents/grok/config.toml` is only a reference copy of the intended settings, to be applied to `~/.grok/config.toml` by hand.
 Cursor is not installed on this machine; when it is, point its User Rules at `~/AGENTS.md` (or symlink a project's `.cursor/rules` to it) to join the same system.
 
 The personal layer itself is version controlled in a **private** repo, `~/github/agents`, so nothing exists only as loose files in the home directory:
@@ -335,7 +337,6 @@ The personal layer itself is version controlled in a **private** repo, `~/github
 ```text
 ~/.claude/CLAUDE.md      -> ~/github/agents/CLAUDE.md
 ~/.grok/AGENTS.md        -> ~/github/agents/GROK.md
-~/.grok/config.toml      -> ~/github/agents/grok/config.toml
 ~/OPINIONS.md            -> ~/github/agents/OPINIONS.md
 ~/VOICE.md               -> ~/github/agents/VOICE.md
 ~/.claude/settings.json  -> ~/github/agents/claude/settings.json
@@ -464,7 +465,7 @@ If you are reproducing this setup for yourself, create that private repo first w
 ic-link
 ```
 
-`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills`, `~/.codex/skills`, and (when Grok is installed) `~/.grok/skills`, the `~/AGENTS.md` and `~/.codex/AGENTS.md` chain, Grok's own `AGENTS.md` / config / agent definitions from `~/github/agents`, and the rest of the personal-layer links (skipped with a note if that repo is absent).
+`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills`, `~/.codex/skills`, and (when Grok is installed) `~/.grok/skills`, the `~/AGENTS.md` and `~/.codex/AGENTS.md` chain, Grok's own `AGENTS.md` and agent definitions from `~/github/agents`, and the rest of the personal-layer links (skipped with a note if that repo is absent).
 Rerun it any time; it repairs stale links in place.
 
 **Step 7: enable the daily sync.**
@@ -520,7 +521,8 @@ npx skills add <owner>/<repo> --skill <name> -g   # -g = all projects (~/.claude
 ic-doctor
 ```
 
-`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the daily sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md` and skills, and Grok's separate `AGENTS.md`, config, skills, and agent definitions).
+`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the daily sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md` and skills, and Grok's separate `AGENTS.md`, skills, and agent definitions, plus the `grok` binary resolving to `~/.local/bin/grok` with no second copy on `PATH`).
+When Grok is installed but `~/github/agents` is not cloned, the repo-backed Grok checks are skipped with a single warning, the same way the Claude personal layer is.
 Checks that do not apply to a platform are reported as such rather than failed: WSL has no desktop layer, so the linked terminal configs are not expected there, and its sync timer is left disabled because systemd is off by default.
 It exits non-zero if anything needs attention, and every failure line names the command that fixes it.
 A healthy system ends with `ic-doctor: all checks passed`.

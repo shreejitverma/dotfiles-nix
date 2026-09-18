@@ -6,8 +6,10 @@
 #   - never create ~/.grok (the Grok installer owns that directory)
 #   - never touch ~/.grok/hooks (firstmate owns the turn-end hook)
 #   - never point ~/.grok/AGENTS.md at Claude's ~/AGENTS.md
-#   - link Grok's own AGENTS.md, config.toml, skills, and agent definitions
-#     from ~/github/agents when that repo is present
+#   - never create, link, replace, or delete ~/.grok/config.toml (Grok owns and
+#     rewrites that file)
+#   - link Grok's own AGENTS.md, skills, and agent definitions from
+#     ~/github/agents when that repo is present
 #
 # Nothing touches the real home directory or the network.
 # Honours DEBUG_KEEP_SANDBOX=1 to leave the scratch directory on disk.
@@ -82,6 +84,11 @@ seed_agents_repo "$home"
 mkdir -p "$home/.grok"
 run_link "$home" >/dev/null
 assert_no_path "$home/.grok/hooks" "ic-link does not create ~/.grok/hooks when firstmate has not"
+if [ -e "$home/.grok/config.toml" ] || [ -L "$home/.grok/config.toml" ]; then
+  fail "ic-link created ~/.grok/config.toml"
+else
+  ok "ic-link does not create ~/.grok/config.toml when Grok has not"
+fi
 
 # --- full Grok personal layer ---
 home=$(new_home grok-full)
@@ -89,13 +96,18 @@ seed_agents_repo "$home"
 mkdir -p "$home/.grok/hooks"
 printf '%s\n' '{"keep":true}' >"$home/.grok/hooks/fm-keep.json"
 printf '%s\n' 'stale-claude-pointer' >"$home/.grok/AGENTS.md"
-printf '%s\n' 'stale-config' >"$home/.grok/config.toml"
+printf '%s\n' 'auto_update = true' >"$home/.grok/config.toml"
 run_link "$home" >/dev/null
 
 assert_eq "$(readlink "$home/.grok/AGENTS.md")" "$home/github/agents/GROK.md" \
   "\$HOME/.grok/AGENTS.md points at GROK.md, not Claude's file"
-assert_eq "$(readlink "$home/.grok/config.toml")" "$home/github/agents/grok/config.toml" \
-  "\$HOME/.grok/config.toml points at the versioned grok config"
+if [ -L "$home/.grok/config.toml" ]; then
+  fail "\$HOME/.grok/config.toml was replaced with a symlink"
+else
+  ok "\$HOME/.grok/config.toml is not linked, even with a reference copy in the agents repo"
+fi
+assert_eq "$(cat "$home/.grok/config.toml" 2>/dev/null)" "auto_update = true" \
+  "Grok-written \$HOME/.grok/config.toml content is left untouched"
 assert_eq "$(readlink "$home/.grok/agents/implementer.md")" "$home/github/agents/grok/agents/implementer.md" \
   "implementer agent definition is linked"
 assert_eq "$(readlink "$home/.grok/agents/reviewer.md")" "$home/github/agents/grok/agents/reviewer.md" \
@@ -121,7 +133,9 @@ printf '%s\n' '{}' >"$home/github/agents/claude/settings.json"
 printf '%s\n' 'opinions' >"$home/github/agents/OPINIONS.md"
 printf '%s\n' 'voice' >"$home/github/agents/VOICE.md"
 printf '%s\n' 'preexisting' >"$home/.grok/AGENTS.md"
-out=$(run_link "$home" 2>&1) || true
+out=$(HOME="$home" "$REPO_ROOT/files/bin/ic-link" 2>&1)
+rc=$?
+assert_eq "$rc" "0" "ic-link exits 0 when GROK.md is missing"
 if grep -q "GROK.md missing" <<<"$out"; then
   ok "warns when GROK.md is missing"
 else
