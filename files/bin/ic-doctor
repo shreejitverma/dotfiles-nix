@@ -9,10 +9,14 @@
 #   5. the daily sync-forks schedule (launchd agent on macOS, systemd user
 #      timer on Linux) and the newest fleet sync log
 #   6. auth (gh, quota-axi keychain access)
-#   7. cross-tool defaults (~/AGENTS.md chain, codex AGENTS.md and skills)
+#   7. cross-tool defaults (~/AGENTS.md chain, codex AGENTS.md and skills,
+#      grok AGENTS.md / agent definitions / skills / binary)
 #
 # Read-only: it never mutates anything. Exits non-zero if any check FAILs;
 # warns are informational and do not affect the exit code.
+#
+# Messages print a literal ~ for readability; none of them is ever used as a path.
+# shellcheck disable=SC2088
 set -uo pipefail
 
 # Platform differences (PATH, platform detection, the literal parsers) live in
@@ -234,6 +238,84 @@ if [ -d "$HOME/.codex" ]; then
   fi
 else
   warn "codex not set up (~/.codex absent); skipping"
+fi
+if [ -d "$HOME/.grok" ]; then
+  if p=$(command -v grok 2>/dev/null); then
+    if [ "$p" != "$HOME/.local/bin/grok" ]; then
+      bad "grok on PATH is $p, want ~/.local/bin/grok (official installer; npm uninstall -g @xai-official/grok)"
+    elif v=$(grok --version 2>/dev/null | head -1); then
+      ok "grok $v"
+    else
+      bad "grok: on PATH at $p but --version failed"
+    fi
+    dups=$(type -a grok 2>/dev/null | grep -c "is /" || true)
+    if [ "$dups" -gt 1 ]; then
+      bad "grok: $dups copies on PATH: $(type -a grok | awk '/is \// {print $NF}' | tr '\n' ' ')(keep ~/.local/bin/grok; npm uninstall -g @xai-official/grok)"
+    fi
+  else
+    bad "grok: ~/.grok exists but grok is not on PATH"
+  fi
+  grok_missing=""
+  for s in $SKILLS; do
+    [ -f "$HOME/.grok/skills/$s/SKILL.md" ] || grok_missing="$grok_missing $s"
+  done
+  if [ -n "$grok_missing" ]; then
+    bad "grok: skills missing or broken:$grok_missing (run: ic-link)"
+  else
+    ok "grok: all skills linked"
+  fi
+  if [ -f "$GH_ROOT/agents/GROK.md" ]; then
+    grok_manual_fix="run: ic-link"
+  else
+    grok_manual_fix="add ~/github/agents/GROK.md, then run: ic-link"
+  fi
+  grok_manual=$(readlink "$HOME/.grok/AGENTS.md" 2>/dev/null)
+  if [ -n "$grok_manual" ] && [ "$grok_manual" != "$GH_ROOT/agents/GROK.md" ]; then
+    bad "grok: ~/.grok/AGENTS.md points at $grok_manual, not ~/github/agents/GROK.md ($grok_manual_fix)"
+  fi
+  if [ -d "$GH_ROOT/agents" ]; then
+    if [ "$grok_manual" = "$GH_ROOT/agents/GROK.md" ]; then
+      ok "grok: ~/.grok/AGENTS.md -> ~/github/agents/GROK.md"
+    elif [ -z "$grok_manual" ]; then
+      bad "grok: ~/.grok/AGENTS.md is missing or not a symlink to ~/github/agents/GROK.md ($grok_manual_fix)"
+    fi
+    if [ ! -f "$GH_ROOT/agents/GROK.md" ]; then
+      bad "grok: ~/github/agents/GROK.md missing (add it to the agents repo, then run: ic-link)"
+    elif grep -q "Default development system" "$GH_ROOT/agents/GROK.md" 2>/dev/null; then
+      ok "GROK.md declares the default development system"
+    else
+      bad "GROK.md missing the 'Default development system' section"
+    fi
+    grok_agents_n=0
+    grok_agents_bad=""
+    for f in "$GH_ROOT"/agents/grok/agents/*.md; do
+      [ -f "$f" ] || continue
+      grok_agents_n=$((grok_agents_n + 1))
+      a=$(basename "$f")
+      [ "$(readlink "$HOME/.grok/agents/$a" 2>/dev/null)" = "$f" ] || grok_agents_bad="$grok_agents_bad $a"
+    done
+    if [ "$grok_agents_n" -eq 0 ]; then
+      warn "grok: no agent definitions at ~/github/agents/grok/agents/*.md; none to link"
+    elif [ -n "$grok_agents_bad" ]; then
+      bad "grok: agent definitions not linked:$grok_agents_bad (run: ic-link)"
+    else
+      ok "grok: $grok_agents_n agent definitions linked from ~/github/agents/grok/agents"
+    fi
+    grok_agents_stale=""
+    for f in "$HOME"/.grok/agents/*; do
+      [ -L "$f" ] && [ ! -e "$f" ] || continue
+      case "$(readlink "$f")" in
+        "$GH_ROOT"/agents/grok/agents/*) grok_agents_stale="$grok_agents_stale $(basename "$f")" ;;
+      esac
+    done
+    if [ -n "$grok_agents_stale" ]; then
+      bad "grok: dangling agent links, source gone from ~/github/agents/grok/agents:$grok_agents_stale (remove: cd ~/.grok/agents && rm$grok_agents_stale)"
+    fi
+  else
+    warn "grok: private agents repo not cloned (~/github/agents); AGENTS.md and agent definitions not checked"
+  fi
+else
+  warn "grok not set up (~/.grok absent); skipping"
 fi
 if [ -d "$GH_ROOT/agents" ]; then
   agents_bad=""

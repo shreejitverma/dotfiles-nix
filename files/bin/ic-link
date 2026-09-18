@@ -3,9 +3,10 @@
 #
 # Idempotent: safe to run any time; ln -sfn replaces stale links in place.
 # This is the versioned recipe for the wiring that ic-doctor verifies:
-#   - agent skills into ~/.agents/skills, mirrored to ~/.claude/skills
-#     and ~/.codex/skills
+#   - agent skills into ~/.agents/skills, mirrored to ~/.claude/skills,
+#     ~/.codex/skills, and ~/.grok/skills (when Grok is installed)
 #   - the cross-tool instruction chain (~/AGENTS.md, ~/.codex/AGENTS.md)
+#   - Grok's own AGENTS.md and agent definitions (never Claude's)
 #   - the personal layer from the private ~/github/agents repo, if present
 set -euo pipefail
 
@@ -83,6 +84,36 @@ if [ -d "$AGENTS_REPO" ]; then
   ln -sf "$AGENTS_REPO/OPINIONS.md"          "$HOME/OPINIONS.md"
   ln -sf "$AGENTS_REPO/VOICE.md"             "$HOME/VOICE.md"
   ln -sf "$AGENTS_REPO/claude/settings.json" "$HOME/.claude/settings.json"
+  personal_layer=1
+else
+  personal_layer=0
+fi
+
+# 5. Grok Build: separate agent files, never Claude's AGENTS.md.
+# The Grok installer owns ~/.grok; never create that directory.
+# Firstmate owns ~/.grok/hooks; never create, replace, or empty it.
+# Grok owns and rewrites ~/.grok/config.toml; never link, replace, or delete it.
+if [ -d "$HOME/.grok" ]; then
+  mkdir -p "$HOME/.grok/skills" "$HOME/.grok/agents"
+  for s in $ALL_SKILLS; do
+    ln -sfn "../../.agents/skills/$s" "$HOME/.grok/skills/$s"
+  done
+  if [ "$personal_layer" -eq 1 ]; then
+    if [ -f "$AGENTS_REPO/GROK.md" ]; then
+      ln -sf "$AGENTS_REPO/GROK.md" "$HOME/.grok/AGENTS.md"
+    else
+      echo "ic-link: warning: $AGENTS_REPO/GROK.md missing; not pointing ~/.grok/AGENTS.md at Claude's file" >&2
+    fi
+    if [ -d "$AGENTS_REPO/grok/agents" ]; then
+      for f in "$AGENTS_REPO"/grok/agents/*.md; do
+        [ -f "$f" ] || continue
+        ln -sf "$f" "$HOME/.grok/agents/$(basename "$f")"
+      done
+    fi
+  fi
+fi
+
+if [ "$personal_layer" -eq 1 ]; then
   echo "ic-link: linked skills, cross-tool chain, and personal layer"
 else
   echo "ic-link: linked skills and cross-tool chain (no $AGENTS_REPO; personal layer skipped)"
