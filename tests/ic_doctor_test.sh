@@ -226,6 +226,8 @@ assert_grep "$section" 'FAIL  grok: ~/github/agents/GROK\.md missing' \
   "names the missing GROK.md source file"
 assert_grep "$section" 'FAIL  grok: no agent definitions at ~/github/agents/grok/agents/\*\.md' \
   "names the missing grok/agents source"
+assert_grep "$section" 'FAIL  grok: dangling agent links, source gone from ~/github/agents/grok/agents: implementer\.md reviewer\.md \(remove: cd ~/.grok/agents && rm implementer\.md reviewer\.md\)' \
+  "names every link left dangling when the repo has no agent definitions at all"
 assert_not_grep "$section" 'FAIL  (grok|GROK)[^(]*\(run: ic-link\)' \
   "does not offer a bare 'run: ic-link' when the source is absent"
 

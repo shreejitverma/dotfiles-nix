@@ -301,7 +301,7 @@ if [ -d "$HOME/.grok" ]; then
         "$GH_ROOT"/agents/grok/agents/*) grok_agents_stale="$grok_agents_stale $(basename "$f")" ;;
       esac
     done
-    if [ "$grok_agents_n" -gt 0 ] && [ -n "$grok_agents_stale" ]; then
+    if [ -n "$grok_agents_stale" ]; then
       bad "grok: dangling agent links, source gone from ~/github/agents/grok/agents:$grok_agents_stale (remove: cd ~/.grok/agents && rm$grok_agents_stale)"
     fi
   else
