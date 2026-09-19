@@ -319,20 +319,24 @@ Codex reaches the same instructions through `~/AGENTS.md`.
 Grok Build has its own files, versioned next to Claude's in the private agents repo:
 
 ```text
-~/AGENTS.md                 -> .claude/CLAUDE.md
+~/AGENTS.md                 -> ~/github/agents/AGENTS.md   (tool-neutral)
 ~/.codex/AGENTS.md          -> ~/AGENTS.md
 ~/.codex/skills/<name>      -> ../../.agents/skills/<name>
 ~/.grok/AGENTS.md           -> ~/github/agents/GROK.md     (only when ~/.grok exists)
 ~/.grok/agents/<name>.md    -> ~/github/agents/grok/agents/<name>.md
 ~/.grok/skills/<name>       -> ../../.agents/skills/<name>
+~/.gemini/AGENTS.md         -> ~/github/agents/GEMINI.md   (only when ~/.gemini exists)
 ```
 
-Claude Code and Codex share `CLAUDE.md`.
-Grok does not: `GROK.md` is a separate operating manual with the same shared rules plus Grok-only wiring.
+Each tool reads its own manual, generated in the private agents repo from one shared source.
+`CLAUDE.md`, `GROK.md` and `GEMINI.md` are per-tool builds, and `AGENTS.md` is the tool-neutral build that Codex and every other `AGENTS.md` reader resolves to, so no tool loads another tool's manual.
+Edit `CORE.md`, `ROUTING.md` or `tools/<tool>.md` in that repo and run its `bin/build-manuals`; never hand-edit a generated manual.
 `ic-link` never points `~/.grok/AGENTS.md` at Claude's file, never creates `~/.grok` (the Grok installer owns that directory), and never touches `~/.grok/hooks/` (firstmate owns the turn-end hook).
 `~/.grok/config.toml` is deliberately not linked: Grok owns that file and rewrites it in place, which replaces any symlink with a regular file.
 `ic-link` never creates, overwrites, or deletes it, and `ic-doctor` does not check it.
-`~/github/agents/grok/config.toml` is only a reference copy of the intended settings, to be applied to `~/.grok/config.toml` by hand.
+The intended Grok settings are recorded in the agents repo README rather than as a versioned copy of that file.
+Gemini is wired the same way, with one addition: `~/.gemini/GEMINI.md` is Gemini's own memory file, written by `/memory add`, so it is never linked or replaced, and the manual goes to `~/.gemini/AGENTS.md` instead.
+Gemini loads it only when `context.fileName` in `~/.gemini/settings.json` lists `AGENTS.md`, which `ic-doctor` checks and `ic-link` never writes, because that file is Gemini's to own.
 Cursor is not installed on this machine; when it is, point its User Rules at `~/AGENTS.md` (or symlink a project's `.cursor/rules` to it) to join the same system.
 
 The personal layer itself is version controlled in a **private** repo, `~/github/agents`, so nothing exists only as loose files in the home directory:

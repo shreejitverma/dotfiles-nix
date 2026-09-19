@@ -55,6 +55,8 @@ seed_agents_repo() {
   local repo="$home/github/agents"
   mkdir -p "$repo/claude" "$repo/grok/agents"
   printf '%s\n' '# Claude operating manual' >"$repo/CLAUDE.md"
+  printf '%s\n' '# Tool-neutral manual' >"$repo/AGENTS.md"
+  printf '%s\n' '# Gemini operating manual' >"$repo/GEMINI.md"
   printf '%s\n' '# Grok operating manual' '## Default development system' >"$repo/GROK.md"
   printf '%s\n' 'opinions' >"$repo/OPINIONS.md"
   printf '%s\n' 'voice' >"$repo/VOICE.md"
@@ -122,8 +124,43 @@ assert_eq "$(readlink "$home/.grok/skills/ship")" "../../.agents/skills/ship" \
 assert_file "$home/.grok/hooks/fm-keep.json" "existing firstmate hook file is left in place"
 assert_eq "$(find "$home/.grok/hooks" -mindepth 1 | wc -l | tr -d ' ')" "1" \
   "ic-link does not add files under ~/.grok/hooks"
+assert_eq "$(readlink "$home/AGENTS.md")" "$home/github/agents/AGENTS.md" \
+  "cross-tool ~/AGENTS.md points at the tool-neutral manual, not Claude's"
+
+# --- no neutral manual: fall back rather than leave ~/AGENTS.md unset ---
+home=$(new_home agents-md-absent)
+seed_agents_repo "$home"
+rm -f "$home/github/agents/AGENTS.md"
+run_link "$home"
 assert_eq "$(readlink "$home/AGENTS.md")" ".claude/CLAUDE.md" \
-  "cross-tool ~/AGENTS.md still points at Claude"
+  "without a neutral manual \$HOME/AGENTS.md falls back to Claude's"
+
+# --- Gemini: linked only into a directory its installer already made ---
+home=$(new_home gemini-absent)
+seed_agents_repo "$home"
+run_link "$home"
+assert_no_path "$home/.gemini" "ic-link does not create ~/.gemini when the installer has not"
+
+home=$(new_home gemini-present)
+seed_agents_repo "$home"
+mkdir -p "$home/.gemini"
+printf '%s\n' '## Gemini Added Memories' >"$home/.gemini/GEMINI.md"
+run_link "$home"
+assert_eq "$(readlink "$home/.gemini/AGENTS.md")" "$home/github/agents/GEMINI.md" \
+  "\$HOME/.gemini/AGENTS.md points at Gemini's own manual"
+assert_eq "$(readlink "$home/.gemini/GEMINI.md" 2>/dev/null || echo not-a-symlink)" "not-a-symlink" \
+  "Gemini's own memory file is left as a real file"
+assert_eq "$(cat "$home/.gemini/GEMINI.md")" "## Gemini Added Memories" \
+  "Gemini's memories are left untouched"
+
+# --- missing GEMINI.md must not fall back to another tool's manual ---
+home=$(new_home gemini-no-manual)
+seed_agents_repo "$home"
+rm -f "$home/github/agents/GEMINI.md"
+mkdir -p "$home/.gemini"
+run_link "$home"
+assert_no_path "$home/.gemini/AGENTS.md" \
+  "no Gemini manual means no \$HOME/.gemini/AGENTS.md link at all"
 
 # --- missing GROK.md must not fall back to Claude ---
 home=$(new_home grok-no-manual)

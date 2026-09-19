@@ -5,7 +5,8 @@
 # This is the versioned recipe for the wiring that ic-doctor verifies:
 #   - agent skills into ~/.agents/skills, mirrored to ~/.claude/skills,
 #     ~/.codex/skills, and ~/.grok/skills (when Grok is installed)
-#   - the cross-tool instruction chain (~/AGENTS.md, ~/.codex/AGENTS.md)
+#   - the cross-tool instruction chain (~/AGENTS.md, ~/.codex/AGENTS.md),
+#     plus each tool's own manual for Grok and Gemini
 #   - Grok's own AGENTS.md and agent definitions (never Claude's)
 #   - the personal layer from the private ~/github/agents repo, if present
 set -euo pipefail
@@ -74,11 +75,20 @@ for s in $ALL_SKILLS; do
 done
 
 # 3. Cross-tool instruction chain.
-ln -sfn ".claude/CLAUDE.md" "$HOME/AGENTS.md"
+# ~/AGENTS.md is what Codex and every other AGENTS.md reader resolves to, so it
+# gets the tool-neutral manual (shared rules plus routing, no tool tuning) rather
+# than Claude's. Pointing it at Claude's file makes one tool's manual another
+# tool's manual, which the shared rules themselves forbid. Without the private
+# repo there is no neutral manual to point at, so the old target stands.
+AGENTS_REPO="$GH_ROOT/agents"
+if [ -f "$AGENTS_REPO/AGENTS.md" ]; then
+  ln -sfn "$AGENTS_REPO/AGENTS.md" "$HOME/AGENTS.md"
+else
+  ln -sfn ".claude/CLAUDE.md" "$HOME/AGENTS.md"
+fi
 ln -sfn "$HOME/AGENTS.md"   "$HOME/.codex/AGENTS.md"
 
 # 4. Personal layer from the private agents repo (skipped if not cloned).
-AGENTS_REPO="$GH_ROOT/agents"
 if [ -d "$AGENTS_REPO" ]; then
   ln -sf "$AGENTS_REPO/CLAUDE.md"            "$HOME/.claude/CLAUDE.md"
   ln -sf "$AGENTS_REPO/OPINIONS.md"          "$HOME/OPINIONS.md"
@@ -110,6 +120,20 @@ if [ -d "$HOME/.grok" ]; then
         ln -sf "$f" "$HOME/.grok/agents/$(basename "$f")"
       done
     fi
+  fi
+fi
+
+# 6. Gemini: its own manual, never Claude's and never its memory file.
+# The Gemini installer owns ~/.gemini; never create that directory.
+# ~/.gemini/GEMINI.md is Gemini's own memory file, written by /memory add;
+# never link, replace, or delete it. The manual goes to a separate filename,
+# which Gemini loads only when context.fileName lists it - ic-doctor checks that
+# setting, because settings.json is Gemini's file to own rather than ours.
+if [ -d "$HOME/.gemini" ] && [ "$personal_layer" -eq 1 ]; then
+  if [ -f "$AGENTS_REPO/GEMINI.md" ]; then
+    ln -sf "$AGENTS_REPO/GEMINI.md" "$HOME/.gemini/AGENTS.md"
+  else
+    echo "ic-link: warning: $AGENTS_REPO/GEMINI.md missing; not pointing ~/.gemini/AGENTS.md at another tool's manual" >&2
   fi
 fi
 
