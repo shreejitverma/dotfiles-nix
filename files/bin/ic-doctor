@@ -217,7 +217,7 @@ echo "[7/7] cross-tool defaults"
 # another tool's manual is the exact fault the per-tool build exists to remove.
 agents_md_target="$(readlink "$HOME/AGENTS.md" 2>/dev/null || true)"
 if [ ! -f "$HOME/AGENTS.md" ]; then
-  if [ -f "$GH_ROOT/agents/AGENTS.md" ] || [ -f "$GH_ROOT/agents/CLAUDE.md" ]; then
+  if [ -f "$GH_ROOT/agents/AGENTS.md" ]; then
     agents_md_fix="run: ic-link"
   elif [ -d "$GH_ROOT/agents" ]; then
     agents_md_fix="run: ~/github/agents/bin/build-manuals, then ic-link"
@@ -372,6 +372,11 @@ if [ -d "$HOME/.gemini" ]; then
       ok "gemini: context.fileName lists AGENTS.md"
     else
       bad "gemini: ~/.gemini/settings.json context.fileName does not list AGENTS.md, so the linked manual is never loaded"
+    fi
+    if grep -q "Default development system" "$GH_ROOT/agents/GEMINI.md" 2>/dev/null; then
+      ok "GEMINI.md declares the default development system"
+    else
+      bad "GEMINI.md missing the 'Default development system' section"
     fi
   elif [ -z "$gemini_manual" ]; then
     bad "gemini: ~/.gemini/AGENTS.md is missing or not a symlink to ~/github/agents/GEMINI.md ($gemini_manual_fix)"

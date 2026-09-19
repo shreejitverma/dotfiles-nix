@@ -8,8 +8,8 @@
 #     it resolves to Claude's manual instead, fail when it dangles, fail naming
 #     bin/build-manuals when the repo is cloned but the neutral build is not
 #     generated, and accept the Claude fallback only with no agents repo at all
-#   - fail when the neutral manual Codex now resolves to has lost the
-#     'Default development system' routing section, not only when Claude's has
+#   - fail when any of the four manuals has lost the 'Default development
+#     system' routing section, not only when Claude's has
 #   - skip Grok checks when ~/.grok is absent
 #   - accept a single official binary at ~/.local/bin/grok plus GROK.md wiring
 #   - fail when grok on PATH is not ~/.local/bin/grok
@@ -386,6 +386,15 @@ assert_grep "$section" 'FAIL  ~/AGENTS.md is missing or dangles, so Codex reads 
 assert_not_grep "$section" 'FAIL  ~/AGENTS.md[^(]*\(run: ic-link\)$' \
   "does not offer a bare 'run: ic-link' when rerunning it would recreate the dangling link"
 
+# --- Claude's manual is not a substitute for the neutral one the link needs ---
+home=$(new_home agents-md-dangling-claude-manual-only)
+plant_wiring "$home"
+rm "$home/github/agents/AGENTS.md" "$home/.claude/CLAUDE.md"
+ln -sfn ".claude/CLAUDE.md" "$home/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" 'FAIL  ~/AGENTS.md is missing or dangles, so Codex reads nothing \(run: ~/github/agents/bin/build-manuals, then ic-link\)' \
+  "names build-manuals when only Claude's manual is generated, since ic-link cannot make a neutral one"
+
 # --- skip when Gemini is not installed ---
 home=$(new_home gemini-absent)
 plant_wiring "$home"
@@ -404,8 +413,23 @@ assert_grep "$section" 'ok    gemini: ~/.gemini/AGENTS.md -> agents/GEMINI.md' \
   "accepts ~/.gemini/AGENTS.md linked to Gemini's own manual"
 assert_grep "$section" 'ok    gemini: context.fileName lists AGENTS.md' \
   "accepts a settings.json whose context.fileName lists AGENTS.md"
+assert_grep "$section" 'ok    GEMINI.md declares the default development system' \
+  "checks the routing section in the manual Gemini loads, as it does for the other three"
 assert_not_grep "$section" 'FAIL  gemini' \
   "does not FAIL gemini checks when the manual is linked and actually loaded"
+assert_not_grep "$section" 'FAIL  GEMINI' \
+  "does not FAIL GEMINI.md when it declares the default development system"
+
+# --- the manual Gemini loads has lost the routing section ---
+home=$(new_home gemini-manual-no-routing)
+plant_wiring "$home"
+plant_gemini "$home"
+printf '%s\n' '# Gemini operating manual' >"$home/github/agents/GEMINI.md"
+section=$(run_section7 "$home")
+assert_grep "$section" "FAIL  GEMINI.md missing the 'Default development system' section" \
+  "fails when the manual Gemini loads no longer routes work through firstmate"
+assert_grep "$section" 'ok    gemini: ~/.gemini/AGENTS.md -> agents/GEMINI.md' \
+  "still reports the link itself as healthy, since only the manual's content regressed"
 
 # --- Gemini's own memory file must stay a real file ---
 home=$(new_home gemini-memory-symlinked)
