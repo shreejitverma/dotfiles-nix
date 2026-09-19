@@ -4,12 +4,14 @@
 bash tests/mac_setup_test.sh        # setup/mac.sh, stubbed
 bash tests/install_dispatch_test.sh # setup/install.sh detection and dispatch, stubbed
 bash tests/sync_forks_test.sh       # files/bin/sync-forks, sandboxed git fixtures
+bash tests/ic_link_test.sh          # files/bin/ic-link Grok wiring, sandboxed HOME
+bash tests/ic_doctor_test.sh        # files/bin/ic-doctor Grok checks (section 7), sandboxed HOME
 bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
 
 All but the last never install anything and run anywhere.
 `linux_e2e_docker.sh` needs Docker and skips itself when Docker is unavailable.
-All four honour `DEBUG_KEEP_SANDBOX=1`, which leaves the scratch directory each one works in (per scenario, for `mac_setup_test.sh`) on disk for inspection after a failing run instead of removing it on exit.
+All six honour `DEBUG_KEEP_SANDBOX=1`, which leaves the scratch directory each one works in (per scenario, for `mac_setup_test.sh`) on disk for inspection after a failing run instead of removing it on exit.
 
 `mac_setup_test.sh` is a regression test for `setup/mac.sh`.
 It never runs the script against the real machine, since that script installs Nix and activates a real `nix-darwin` system.
@@ -90,3 +92,36 @@ The stubs and the install-command fixtures deliberately read stdin, so dropping 
 It covers: a behind fork fast-forwarded, pushed, and reinstalled; an up-to-date fork whose install command must not re-run and whose stale local `user.email`/`user.name` overrides are stripped; a diverged fork reported and left byte-for-byte untouched (locally, on the fork remote, and by `gh repo sync`, which must not be called for it); an ahead-only fork reported and never published (no push, no `gh repo sync`); dirty-tree, wrong-branch, uncloned, and `sync: false` entries; a transient fetch failure retried once and recovering into a normal sync with no failure notification, while a persistently unreachable remote fails the repo after exactly two attempts (a PATH-leading `git` wrapper fails `fetch` while a per-repo countdown is positive, and a stub `sleep` records the requested 30-second pause and returns immediately); the parsed sync-eligible entry count being logged, with a manifest that parses to zero entries (format drift) exiting non-zero and notifying instead of reading as a clean run; 30-day log rotation; a missing `upstream` remote failing the repo rather than reading as up to date; failure notifications outranking diverged ones; a host with no manifest exiting 0 quietly; `--dry-run` reporting drift while mutating nothing, never notifying, and judging identity as if the local override it reports were already stripped; a stray global identity failing the repo before any sync; and `ic-workflow.zsh` sourcing the generated fleet aliases file when present and sourcing cleanly when absent.
 
 The fleet manifest, `gh` behaviour, and desktop notifications are the suite's stub boundary; the launchd schedule and systemd timer that trigger the script are nix module config, outside this suite's scope and not asserted by any automated check.
+
+## ic_link_test.sh
+
+Runs the real `files/bin/ic-link` against fake `$HOME` directories under one scratch sandbox and asserts the resulting link state with `readlink`, never the script's source.
+Nothing is stubbed: `ic-link` only creates symlinks under `$HOME`, so re-homing it is the whole isolation.
+Each scenario seeds a fake `~/github/agents` with `CLAUDE.md`, `GROK.md`, `grok/config.toml`, and two agent definitions, unless the scenario is about one of them being absent.
+
+It covers:
+
+- `~/.grok` absent, where `ic-link` must not create it (the Grok installer owns that directory)
+- `~/.grok` present without `hooks/` or `config.toml`, where neither may be created (firstmate owns the hook files, Grok owns its config)
+- the full layer, where `~/.grok/AGENTS.md` must point at `GROK.md`, every `grok/agents/*.md` must be linked, the skill mirrors must use the same relative target as the Claude and Codex mirrors, an existing hook file must survive with nothing added beside it, and a Grok-written regular `~/.grok/config.toml` must keep its content and must not become a symlink even though the agents repo carries a reference copy
+- an agents repo without `GROK.md`, where `ic-link` must exit 0, warn, leave a preexisting `~/.grok/AGENTS.md` in place, and never fall back to Claude's file
+
+## ic_doctor_test.sh
+
+Runs the real `files/bin/ic-doctor` against fake `$HOME` directories and asserts only the Grok lines of section 7, cut from the output at the `[7/7]` header.
+The other sections still run against the fake `HOME` and the host, and may FAIL there; that is expected and not asserted.
+The only stub is a fake `grok` executable that prints a version line, planted at `~/.local/bin/grok` or `~/go/bin/grok` inside the fake `HOME`; both directories are on the PATH `ic-doctor` builds for itself (`ic_default_path`).
+That PATH also includes host directories outside the fake `HOME`, so a real `grok` installed somewhere like `/opt/homebrew/bin` on the host would show up as a second copy; the suite does not mask that.
+
+It covers:
+
+- `~/.grok` absent: one skip warning and no Grok FAIL
+- a healthy install: the binary, the `GROK.md` link, the "Default development system" section, the skill mirrors, and the agent definitions all `ok`, with a Grok-owned regular `~/.grok/config.toml` never mentioned and the Claude personal-layer check unaffected by `~/.grok`
+- `grok` resolving outside `~/.local/bin`, and a second `grok` on PATH: both FAIL, the latter naming the copy to keep and the `npm uninstall` that drops the other
+- `~/.grok/AGENTS.md` pointing at Claude's file: exactly one FAIL line, naming the actual target; the same FAIL must still appear, as its own line beside the missing-source FAIL, when `GROK.md` is absent (the state a machine wired by this branch's first commits is in until `GROK.md` is added), and when `~/github/agents` is not cloned at all
+- `~/.grok/AGENTS.md` as a regular file: FAIL, since only a link to `GROK.md` is Grok's versioned manual
+- a version line with an unrecognised channel label: accepted, since the official binary is identified by location alone
+- an agent definition renamed in the agents repo: FAIL naming the unlinked file, then `ok` once linked, with no fixed list of expected names; the old link the rename leaves dangling is a separate FAIL naming it and the `rm` that clears it (`ic-link` never deletes inside `~/.grok`), and a dangling link that never pointed into the agents repo is ignored
+- Grok installed with `~/github/agents` not cloned: exactly one Grok warning, the skill mirrors still checked, and no Grok FAIL
+- an agents repo with `GROK.md` but no `grok/agents`, which is all the README asks for: exactly one warning naming the absent source and no Grok FAIL, since agent definitions are optional and `ic-link` skips them the same way
+- an agents repo lacking `GROK.md` and `grok/agents`: the missing `GROK.md` is a FAIL naming the source to add rather than a bare `run: ic-link`, which would be a no-op there; the missing `grok/agents` is only a warning, but the links that removal leaves dangling are all named in their own FAIL line, since the dangling scan does not depend on how many definitions the repo still has
