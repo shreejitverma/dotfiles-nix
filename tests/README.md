@@ -119,7 +119,7 @@ That PATH also includes host directories outside the fake `HOME`, so a real `gro
 
 It covers:
 
-- `~/AGENTS.md` linked to the tool-neutral `agents/AGENTS.md`: `ok`, with no FAIL on the cross-tool chain
+- `~/AGENTS.md` linked to the tool-neutral `agents/AGENTS.md`: `ok`, with no FAIL on the cross-tool chain, and the `Default development system` routing section verified in that file rather than only in Claude's, since it is what Codex now loads; a neutral manual that has lost the section is a FAIL beside a still-`ok` `CLAUDE.md`
 - `~/AGENTS.md` resolving to Claude's manual while a neutral build exists: FAIL naming that specific fault, since one tool reading another tool's manual is what the per-tool build exists to remove
 - the agents repo cloned but its `AGENTS.md` never generated: FAIL naming `bin/build-manuals`, never an `ok` for the Claude fallback, which matches how a missing `GROK.md` or `GEMINI.md` source already FAILs
 - no agents repo at all: the Claude fallback is the only target there is, so it is `ok`
@@ -139,5 +139,5 @@ It covers:
 - `~/.gemini/GEMINI.md` made a symlink: FAIL, since that is Gemini's own memory file, written by `/memory add`, and must stay a real file
 - `~/.gemini/AGENTS.md` not linked: FAIL naming the source it should point at
 - an agents repo without `GEMINI.md`: exactly one Gemini FAIL, naming the missing source rather than blaming the link
-- `context.fileName` not listing `AGENTS.md`: FAIL, since the link alone never loads; `ic-doctor` checks that setting because `settings.json` is Gemini's file to own and `ic-link` never writes it
-- Gemini installed with `~/github/agents` not cloned: exactly one Gemini warning and no Gemini FAIL
+- `context.fileName` not listing `AGENTS.md` while a manual is linked: FAIL, since the link alone never loads; `ic-doctor` checks that setting because `settings.json` is Gemini's file to own and `ic-link` never writes it
+- Gemini installed with `~/github/agents` not cloned, both with a settings file that has no `AGENTS.md` entry and with no settings file at all (the two states a fresh Gemini install is actually in): exactly one Gemini warning and no Gemini FAIL, since `ic-link` deliberately links nothing there and a check about the linked manual never loading would contradict the warning above it; the same holds for a cloned repo with no `GEMINI.md`, which yields only the missing-source FAIL

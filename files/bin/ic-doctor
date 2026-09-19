@@ -226,6 +226,11 @@ elif [ -f "$GH_ROOT/agents/AGENTS.md" ]; then
   else
     bad "~/AGENTS.md is not a symlink to $GH_ROOT/agents/AGENTS.md (run: ic-link)"
   fi
+  if grep -q "Default development system" "$GH_ROOT/agents/AGENTS.md" 2>/dev/null; then
+    ok "agents/AGENTS.md declares the default development system"
+  else
+    bad "agents/AGENTS.md missing the 'Default development system' section"
+  fi
 elif [ -d "$GH_ROOT/agents" ]; then
   bad "~/github/agents/AGENTS.md not generated, so ~/AGENTS.md carries another tool's manual (run: ~/github/agents/bin/build-manuals, then ic-link)"
 elif [ "$agents_md_target" = ".claude/CLAUDE.md" ]; then
@@ -344,14 +349,14 @@ if [ -d "$HOME/.gemini" ]; then
     bad "gemini: $GH_ROOT/agents/GEMINI.md missing, so there is no manual to link"
   elif [ "$(readlink "$HOME/.gemini/AGENTS.md" 2>/dev/null || true)" = "$GH_ROOT/agents/GEMINI.md" ]; then
     ok "gemini: ~/.gemini/AGENTS.md -> agents/GEMINI.md"
+    # The link alone does nothing: Gemini reads only the filenames listed here.
+    if grep -q '"AGENTS.md"' "$HOME/.gemini/settings.json" 2>/dev/null; then
+      ok "gemini: context.fileName lists AGENTS.md"
+    else
+      bad "gemini: ~/.gemini/settings.json context.fileName does not list AGENTS.md, so the linked manual is never loaded"
+    fi
   else
     bad "gemini: ~/.gemini/AGENTS.md is not a symlink to $GH_ROOT/agents/GEMINI.md (run: ic-link)"
-  fi
-  # The link alone does nothing: Gemini reads only the filenames listed here.
-  if grep -q '"AGENTS.md"' "$HOME/.gemini/settings.json" 2>/dev/null; then
-    ok "gemini: context.fileName lists AGENTS.md"
-  else
-    bad "gemini: ~/.gemini/settings.json context.fileName does not list AGENTS.md, so the linked manual is never loaded"
   fi
 else
   warn "gemini not set up (~/.gemini absent); skipping"

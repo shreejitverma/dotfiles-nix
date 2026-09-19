@@ -8,6 +8,8 @@
 #     it resolves to Claude's manual instead, fail when it dangles, fail naming
 #     bin/build-manuals when the repo is cloned but the neutral build is not
 #     generated, and accept the Claude fallback only with no agents repo at all
+#   - fail when the neutral manual Codex now resolves to has lost the
+#     'Default development system' routing section, not only when Claude's has
 #   - skip Grok checks when ~/.grok is absent
 #   - accept a single official binary at ~/.local/bin/grok plus GROK.md wiring
 #   - fail when grok on PATH is not ~/.local/bin/grok
@@ -23,7 +25,8 @@
 #   - skip Gemini checks when ~/.gemini is absent, and otherwise fail when
 #     ~/.gemini/AGENTS.md is not linked to GEMINI.md, when GEMINI.md is missing
 #     from the repo, when ~/.gemini/GEMINI.md (Gemini's memory file) has been
-#     made a symlink, or when context.fileName does not list AGENTS.md
+#     made a symlink, or when a linked manual is not listed in context.fileName,
+#     while never blaming context.fileName where no manual is linked at all
 #
 # Other ic-doctor sections (checkout path, forks, host binaries) still run and
 # may FAIL; this suite only asserts section 7.
@@ -311,6 +314,18 @@ assert_grep "$section" 'ok    ~/AGENTS.md -> agents/AGENTS.md \(tool-neutral\)' 
   "accepts ~/AGENTS.md linked to the tool-neutral manual"
 assert_not_grep "$section" 'FAIL  ~/AGENTS.md' \
   "does not FAIL the cross-tool chain when it carries the neutral manual"
+assert_grep "$section" 'ok    agents/AGENTS.md declares the default development system' \
+  "checks the routing section in the manual Codex resolves to, not only Claude's"
+
+# --- the neutral manual Codex reads has lost the routing section ---
+home=$(new_home neutral-manual-no-routing)
+plant_wiring "$home"
+printf '%s\n' '# Tool-neutral manual' >"$home/github/agents/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" "FAIL  agents/AGENTS.md missing the 'Default development system' section" \
+  "fails when the neutral manual no longer declares the default development system"
+assert_grep "$section" 'ok    CLAUDE.md declares the default development system' \
+  "still reports Claude's own manual separately, since Claude reads it directly"
 
 # --- ~/AGENTS.md pointing at Claude's manual while a neutral build exists ---
 home=$(new_home neutral-manual-claude-pointer)
@@ -409,12 +424,30 @@ assert_grep "$section" 'FAIL  gemini: ~/.gemini/settings.json context.fileName d
 # --- Gemini installed, private agents repo not cloned ---
 home=$(new_home gemini-no-agents-repo)
 mkdir -p "$home/.gemini"
-printf '%s\n' '{"context": {"fileName": ["AGENTS.md"]}}' >"$home/.gemini/settings.json"
+printf '%s\n' '{"context": {"fileName": ["GEMINI.md"]}}' >"$home/.gemini/settings.json"
 section=$(run_section7 "$home")
 assert_line_count "$section" 'warn  gemini: private agents repo not cloned; manual not linked' 1 \
   "warns once when Gemini is installed but ~/github/agents is not cloned"
 assert_not_grep "$section" 'FAIL  gemini' \
-  "does not FAIL gemini checks when ~/github/agents is not cloned"
+  "does not blame context.fileName on a fresh Gemini install with no manual to load"
+
+# --- and the same with the settings file Gemini has not written yet ---
+home=$(new_home gemini-no-agents-repo-no-settings)
+mkdir -p "$home/.gemini"
+section=$(run_section7 "$home")
+assert_line_count "$section" 'warn  gemini: private agents repo not cloned; manual not linked' 1 \
+  "warns once when Gemini is installed with no settings.json at all"
+assert_not_grep "$section" 'FAIL  gemini' \
+  "does not FAIL on a missing settings.json when no manual is linked"
+
+# --- a missing manual source must not draw a second FAIL about loading it ---
+home=$(new_home gemini-no-manual-source-fresh-settings)
+plant_wiring "$home"
+plant_gemini "$home"
+rm "$home/github/agents/GEMINI.md" "$home/.gemini/settings.json"
+section=$(run_section7 "$home")
+assert_line_count "$section" 'FAIL  gemini' 1 \
+  "names only the missing GEMINI.md source, never context.fileName, when nothing is linked"
 
 echo
 if [ "$FAILS" -eq 0 ]; then

@@ -343,6 +343,7 @@ The personal layer itself is version controlled in a **private** repo, `~/github
 ```text
 ~/.claude/CLAUDE.md      -> ~/github/agents/CLAUDE.md
 ~/.grok/AGENTS.md        -> ~/github/agents/GROK.md
+~/.gemini/AGENTS.md      -> ~/github/agents/GEMINI.md
 ~/OPINIONS.md            -> ~/github/agents/OPINIONS.md
 ~/VOICE.md               -> ~/github/agents/VOICE.md
 ~/.claude/settings.json  -> ~/github/agents/claude/settings.json
