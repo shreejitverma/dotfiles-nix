@@ -45,7 +45,7 @@ assert_file() {
   if [ -e "$1" ]; then ok "$2"; else fail "$2 ($1 missing)"; fi
 }
 assert_no_path() {
-  if [ -e "$1" ]; then fail "$2 ($1 exists)"; else ok "$2"; fi
+  if [ -e "$1" ] || [ -L "$1" ]; then fail "$2 ($1 exists)"; else ok "$2"; fi
 }
 
 new_home() {

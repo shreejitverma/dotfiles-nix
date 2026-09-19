@@ -124,7 +124,7 @@ It covers:
 - `~/AGENTS.md` resolving to Claude's manual while a neutral build exists: FAIL naming that specific fault, since one tool reading another tool's manual is what the per-tool build exists to remove
 - the agents repo cloned but its `AGENTS.md` never generated: FAIL naming `bin/build-manuals`, never an `ok` for the Claude fallback, which matches how a missing `GROK.md` or `GEMINI.md` source already FAILs
 - no agents repo at all: the Claude fallback is the only target there is, so it is `ok`
-- that same fallback target with no `~/.claude/CLAUDE.md` behind it: FAIL, since a dangling `~/AGENTS.md` means Codex reads nothing
+- that same fallback target with no `~/.claude/CLAUDE.md` behind it: FAIL, since a dangling `~/AGENTS.md` means Codex reads nothing, and the remedy follows what is actually missing rather than always naming `ic-link`, which is the command that produced the dangling link: `clone ~/github/agents` with no repo, `bin/build-manuals` with the repo cloned but no manual generated, and `ic-link` alone once a manual exists to point at
 - `~/.grok` absent: one skip warning and no Grok FAIL
 - a healthy install: the binary, the `GROK.md` link, the "Default development system" section, the skill mirrors, and the agent definitions all `ok`, with a Grok-owned regular `~/.grok/config.toml` never mentioned and the Claude personal-layer check unaffected by `~/.grok`
 - `grok` resolving outside `~/.local/bin`, and a second `grok` on PATH: both FAIL, the latter naming the copy to keep and the `npm uninstall` that drops the other
@@ -139,6 +139,7 @@ It covers:
 - healthy Gemini wiring: `~/.gemini/AGENTS.md` linked to `GEMINI.md` and `context.fileName` listing `AGENTS.md` are both `ok`, with no Gemini FAIL
 - `~/.gemini/GEMINI.md` made a symlink: FAIL, since that is Gemini's own memory file, written by `/memory add`, and must stay a real file
 - `~/.gemini/AGENTS.md` not linked: FAIL naming the source it should point at
+- `~/.gemini/AGENTS.md` pointing at Claude's manual: exactly one FAIL line, naming the actual target; the same FAIL must still appear when `~/github/agents` is not cloned at all, which is the state every hand-made link is in and the one the repo guard used to hide, and there the mislink is the only Gemini line, since claiming no manual is linked would contradict it
 - an agents repo without `GEMINI.md`: exactly one Gemini FAIL, naming the missing source rather than blaming the link
 - `context.fileName` not listing `AGENTS.md` while a manual is linked: FAIL, since the link alone never loads; `ic-doctor` checks that setting because `settings.json` is Gemini's file to own and `ic-link` never writes it
 - Gemini installed with `~/github/agents` not cloned, both with a settings file that has no `AGENTS.md` entry and with no settings file at all (the two states a fresh Gemini install is actually in): exactly one Gemini warning and no Gemini FAIL, since `ic-link` deliberately links nothing there and a check about the linked manual never loading would contradict the warning above it; the same holds for a cloned repo with no `GEMINI.md`, which yields only the missing-source FAIL

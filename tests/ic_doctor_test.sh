@@ -361,7 +361,7 @@ assert_grep "$section" 'ok    ~/AGENTS.md -> ~/.claude/CLAUDE.md \(no agents rep
 home=$(new_home agents-md-dangling)
 ln -sfn ".claude/CLAUDE.md" "$home/AGENTS.md"
 section=$(run_section7 "$home")
-assert_grep "$section" 'FAIL  ~/AGENTS.md is missing or dangles and there is no manual to point it at, so Codex reads nothing \(clone ~/github/agents, then run: ic-link\)' \
+assert_grep "$section" 'FAIL  ~/AGENTS.md is missing or dangles, so Codex reads nothing \(clone ~/github/agents, then run: ic-link\)' \
   "fails on a dangling ~/AGENTS.md rather than accepting its target as the fallback"
 assert_not_grep "$section" 'FAIL  ~/AGENTS.md[^(]*\(run: ic-link\)$' \
   "does not offer a bare 'run: ic-link', which is what created the dangling link"
@@ -374,6 +374,17 @@ ln -sfn ".claude/CLAUDE.md" "$home/AGENTS.md"
 section=$(run_section7 "$home")
 assert_grep "$section" 'FAIL  ~/AGENTS.md is missing or dangles, so Codex reads nothing \(run: ic-link\)' \
   "offers ic-link for a dangling ~/AGENTS.md once there is a manual to point it at"
+
+# --- the repo cloned, but bin/build-manuals never run, so there is still no target ---
+home=$(new_home agents-md-dangling-no-manuals)
+plant_wiring "$home"
+rm "$home/github/agents/AGENTS.md" "$home/github/agents/CLAUDE.md"
+ln -sfn ".claude/CLAUDE.md" "$home/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" 'FAIL  ~/AGENTS.md is missing or dangles, so Codex reads nothing \(run: ~/github/agents/bin/build-manuals, then ic-link\)' \
+  "names build-manuals when the repo is cloned but no manual is generated to point at"
+assert_not_grep "$section" 'FAIL  ~/AGENTS.md[^(]*\(run: ic-link\)$' \
+  "does not offer a bare 'run: ic-link' when rerunning it would recreate the dangling link"
 
 # --- skip when Gemini is not installed ---
 home=$(new_home gemini-absent)
@@ -433,8 +444,10 @@ ln -sfn "$home/.claude/CLAUDE.md" "$home/.gemini/AGENTS.md"
 section=$(run_section7 "$home")
 assert_grep "$section" "FAIL  gemini: ~/.gemini/AGENTS.md points at $home/.claude/CLAUDE\.md, not ~/github/agents/GEMINI\.md \(add ~/github/agents/GEMINI\.md, then run: ic-link\)" \
   "names Claude's manual as the target even when ~/github/agents is not cloned"
-assert_line_count "$section" 'warn  gemini: private agents repo not cloned' 1 \
-  "still warns once about the uncloned agents repo"
+assert_not_grep "$section" 'warn  gemini: private agents repo not cloned' \
+  "does not also claim no manual is linked, when the wrong one is"
+assert_line_count "$section" '(FAIL|warn)  gemini' 1 \
+  "the mislink is the only thing said about Gemini in that state"
 
 # --- agents repo present but missing the Gemini source ---
 home=$(new_home gemini-no-manual-source)

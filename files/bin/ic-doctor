@@ -217,11 +217,14 @@ echo "[7/7] cross-tool defaults"
 # another tool's manual is the exact fault the per-tool build exists to remove.
 agents_md_target="$(readlink "$HOME/AGENTS.md" 2>/dev/null || true)"
 if [ ! -f "$HOME/AGENTS.md" ]; then
-  if [ -d "$GH_ROOT/agents" ]; then
-    bad "~/AGENTS.md is missing or dangles, so Codex reads nothing (run: ic-link)"
+  if [ -f "$GH_ROOT/agents/AGENTS.md" ] || [ -f "$GH_ROOT/agents/CLAUDE.md" ]; then
+    agents_md_fix="run: ic-link"
+  elif [ -d "$GH_ROOT/agents" ]; then
+    agents_md_fix="run: ~/github/agents/bin/build-manuals, then ic-link"
   else
-    bad "~/AGENTS.md is missing or dangles and there is no manual to point it at, so Codex reads nothing (clone ~/github/agents, then run: ic-link)"
+    agents_md_fix="clone ~/github/agents, then run: ic-link"
   fi
+  bad "~/AGENTS.md is missing or dangles, so Codex reads nothing ($agents_md_fix)"
 elif [ -f "$GH_ROOT/agents/AGENTS.md" ]; then
   if [ "$agents_md_target" = "$GH_ROOT/agents/AGENTS.md" ]; then
     ok "~/AGENTS.md -> agents/AGENTS.md (tool-neutral)"
@@ -357,7 +360,9 @@ if [ -d "$HOME/.gemini" ]; then
     bad "gemini: ~/.gemini/AGENTS.md points at $gemini_manual, not ~/github/agents/GEMINI.md ($gemini_manual_fix)"
   fi
   if [ ! -d "$GH_ROOT/agents" ]; then
-    warn "gemini: private agents repo not cloned; manual not linked"
+    if [ -z "$gemini_manual" ]; then
+      warn "gemini: private agents repo not cloned; manual not linked"
+    fi
   elif [ ! -f "$GH_ROOT/agents/GEMINI.md" ]; then
     bad "gemini: $GH_ROOT/agents/GEMINI.md missing, so there is no manual to link"
   elif [ "$gemini_manual" = "$GH_ROOT/agents/GEMINI.md" ]; then
