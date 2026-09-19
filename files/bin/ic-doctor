@@ -217,7 +217,11 @@ echo "[7/7] cross-tool defaults"
 # another tool's manual is the exact fault the per-tool build exists to remove.
 agents_md_target="$(readlink "$HOME/AGENTS.md" 2>/dev/null || true)"
 if [ ! -f "$HOME/AGENTS.md" ]; then
-  bad "~/AGENTS.md is missing or dangles, so Codex reads nothing (run: ic-link)"
+  if [ -d "$GH_ROOT/agents" ]; then
+    bad "~/AGENTS.md is missing or dangles, so Codex reads nothing (run: ic-link)"
+  else
+    bad "~/AGENTS.md is missing or dangles and there is no manual to point it at, so Codex reads nothing (clone ~/github/agents, then run: ic-link)"
+  fi
 elif [ -f "$GH_ROOT/agents/AGENTS.md" ]; then
   if [ "$agents_md_target" = "$GH_ROOT/agents/AGENTS.md" ]; then
     ok "~/AGENTS.md -> agents/AGENTS.md (tool-neutral)"
@@ -343,11 +347,20 @@ if [ -d "$HOME/.gemini" ]; then
   if [ -L "$HOME/.gemini/GEMINI.md" ]; then
     bad "gemini: ~/.gemini/GEMINI.md is a symlink; it is Gemini's own memory file and must stay a real file"
   fi
+  if [ -f "$GH_ROOT/agents/GEMINI.md" ]; then
+    gemini_manual_fix="run: ic-link"
+  else
+    gemini_manual_fix="add ~/github/agents/GEMINI.md, then run: ic-link"
+  fi
+  gemini_manual=$(readlink "$HOME/.gemini/AGENTS.md" 2>/dev/null)
+  if [ -n "$gemini_manual" ] && [ "$gemini_manual" != "$GH_ROOT/agents/GEMINI.md" ]; then
+    bad "gemini: ~/.gemini/AGENTS.md points at $gemini_manual, not ~/github/agents/GEMINI.md ($gemini_manual_fix)"
+  fi
   if [ ! -d "$GH_ROOT/agents" ]; then
     warn "gemini: private agents repo not cloned; manual not linked"
   elif [ ! -f "$GH_ROOT/agents/GEMINI.md" ]; then
     bad "gemini: $GH_ROOT/agents/GEMINI.md missing, so there is no manual to link"
-  elif [ "$(readlink "$HOME/.gemini/AGENTS.md" 2>/dev/null || true)" = "$GH_ROOT/agents/GEMINI.md" ]; then
+  elif [ "$gemini_manual" = "$GH_ROOT/agents/GEMINI.md" ]; then
     ok "gemini: ~/.gemini/AGENTS.md -> agents/GEMINI.md"
     # The link alone does nothing: Gemini reads only the filenames listed here.
     if grep -q '"AGENTS.md"' "$HOME/.gemini/settings.json" 2>/dev/null; then
@@ -355,8 +368,8 @@ if [ -d "$HOME/.gemini" ]; then
     else
       bad "gemini: ~/.gemini/settings.json context.fileName does not list AGENTS.md, so the linked manual is never loaded"
     fi
-  else
-    bad "gemini: ~/.gemini/AGENTS.md is not a symlink to $GH_ROOT/agents/GEMINI.md (run: ic-link)"
+  elif [ -z "$gemini_manual" ]; then
+    bad "gemini: ~/.gemini/AGENTS.md is missing or not a symlink to ~/github/agents/GEMINI.md ($gemini_manual_fix)"
   fi
 else
   warn "gemini not set up (~/.gemini absent); skipping"

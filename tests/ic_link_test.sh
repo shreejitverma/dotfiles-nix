@@ -65,6 +65,7 @@ seed_agents_repo() {
   printf '%s\n' 'opinions' >"$repo/OPINIONS.md"
   printf '%s\n' 'voice' >"$repo/VOICE.md"
   printf '%s\n' '{}' >"$repo/claude/settings.json"
+  # A stray the real agents repo does not version: ic-link must skip it by rule.
   printf '%s\n' 'default = "grok-4.6"' >"$repo/grok/config.toml"
   printf '%s\n' '# implementer' >"$repo/grok/agents/implementer.md"
   printf '%s\n' '# reviewer' >"$repo/grok/agents/reviewer.md"
@@ -110,7 +111,7 @@ assert_eq "$(readlink "$home/.grok/AGENTS.md")" "$home/github/agents/GROK.md" \
 if [ -L "$home/.grok/config.toml" ]; then
   fail "\$HOME/.grok/config.toml was replaced with a symlink"
 else
-  ok "\$HOME/.grok/config.toml is not linked, even when the agents repo carries a config.toml"
+  ok "\$HOME/.grok/config.toml is not linked, even with a stray copy in the agents repo"
 fi
 assert_eq "$(cat "$home/.grok/config.toml" 2>/dev/null)" "auto_update = true" \
   "Grok-written \$HOME/.grok/config.toml content is left untouched"

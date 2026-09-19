@@ -97,13 +97,14 @@ The fleet manifest, `gh` behaviour, and desktop notifications are the suite's st
 
 Runs the real `files/bin/ic-link` against fake `$HOME` directories under one scratch sandbox and asserts the resulting link state with `readlink`, never the script's source.
 Nothing is stubbed: `ic-link` only creates symlinks under `$HOME`, so re-homing it is the whole isolation.
-Each scenario seeds a fake `~/github/agents` with `AGENTS.md` (the tool-neutral build), `CLAUDE.md`, `GEMINI.md`, `GROK.md`, `grok/config.toml`, and two agent definitions, unless the scenario is about one of them being absent.
+Each scenario seeds a fake `~/github/agents` with `AGENTS.md` (the tool-neutral build), `CLAUDE.md`, `GEMINI.md`, `GROK.md`, and two agent definitions, unless the scenario is about one of them being absent.
+It also seeds a `grok/config.toml` there, which the real agents repo deliberately does not version: it is a stray that `ic-link` must ignore, so seeding it is what proves the file is skipped by rule rather than only because no copy happens to exist.
 
 It covers:
 
 - `~/.grok` absent, where `ic-link` must not create it (the Grok installer owns that directory)
 - `~/.grok` present without `hooks/` or `config.toml`, where neither may be created (firstmate owns the hook files, Grok owns its config)
-- the full layer, where `~/AGENTS.md` must point at the tool-neutral `agents/AGENTS.md` rather than Claude's manual, `~/.grok/AGENTS.md` must point at `GROK.md`, every `grok/agents/*.md` must be linked, the skill mirrors must use the same relative target as the Claude and Codex mirrors, an existing hook file must survive with nothing added beside it, and a Grok-written regular `~/.grok/config.toml` must keep its content and must not become a symlink even though the agents repo carries one
+- the full layer, where `~/AGENTS.md` must point at the tool-neutral `agents/AGENTS.md` rather than Claude's manual, `~/.grok/AGENTS.md` must point at `GROK.md`, every `grok/agents/*.md` must be linked, the skill mirrors must use the same relative target as the Claude and Codex mirrors, an existing hook file must survive with nothing added beside it, and a Grok-written regular `~/.grok/config.toml` must keep its content and must not become a symlink even with a stray copy sitting in the agents repo
 - an agents repo without the tool-neutral `AGENTS.md`, where `~/AGENTS.md` must fall back to Claude's manual rather than dangle
 - `~/.gemini` absent, where `ic-link` must not create it (the Gemini installer owns that directory)
 - `~/.gemini` present, where `~/.gemini/AGENTS.md` must point at `GEMINI.md` while `~/.gemini/GEMINI.md`, Gemini's own memory file, stays a real file with its content untouched

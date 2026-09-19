@@ -23,10 +23,12 @@
 #   - name the missing source when the agents repo lacks GROK.md (FAIL) or
 #     grok/agents (warn only: agent definitions are optional)
 #   - skip Gemini checks when ~/.gemini is absent, and otherwise fail when
-#     ~/.gemini/AGENTS.md is not linked to GEMINI.md, when GEMINI.md is missing
-#     from the repo, when ~/.gemini/GEMINI.md (Gemini's memory file) has been
-#     made a symlink, or when a linked manual is not listed in context.fileName,
-#     while never blaming context.fileName where no manual is linked at all
+#     ~/.gemini/AGENTS.md is not linked to GEMINI.md, naming the actual target
+#     whether or not GEMINI.md or the agents repo exists, when GEMINI.md is
+#     missing from the repo, when ~/.gemini/GEMINI.md (Gemini's memory file) has
+#     been made a symlink, or when a linked manual is not listed in
+#     context.fileName, while never blaming context.fileName where no manual is
+#     linked at all
 #
 # Other ic-doctor sections (checkout path, forks, host binaries) still run and
 # may FAIL; this suite only asserts section 7.
@@ -359,8 +361,19 @@ assert_grep "$section" 'ok    ~/AGENTS.md -> ~/.claude/CLAUDE.md \(no agents rep
 home=$(new_home agents-md-dangling)
 ln -sfn ".claude/CLAUDE.md" "$home/AGENTS.md"
 section=$(run_section7 "$home")
-assert_grep "$section" 'FAIL  ~/AGENTS.md is missing or dangles, so Codex reads nothing \(run: ic-link\)' \
+assert_grep "$section" 'FAIL  ~/AGENTS.md is missing or dangles and there is no manual to point it at, so Codex reads nothing \(clone ~/github/agents, then run: ic-link\)' \
   "fails on a dangling ~/AGENTS.md rather than accepting its target as the fallback"
+assert_not_grep "$section" 'FAIL  ~/AGENTS.md[^(]*\(run: ic-link\)$' \
+  "does not offer a bare 'run: ic-link', which is what created the dangling link"
+
+# --- the same dangling link with the agents repo cloned, where ic-link is the fix ---
+home=$(new_home agents-md-dangling-with-repo)
+plant_wiring "$home"
+rm "$home/.claude/CLAUDE.md"
+ln -sfn ".claude/CLAUDE.md" "$home/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" 'FAIL  ~/AGENTS.md is missing or dangles, so Codex reads nothing \(run: ic-link\)' \
+  "offers ic-link for a dangling ~/AGENTS.md once there is a manual to point it at"
 
 # --- skip when Gemini is not installed ---
 home=$(new_home gemini-absent)
@@ -398,8 +411,30 @@ plant_wiring "$home"
 plant_gemini "$home"
 rm "$home/.gemini/AGENTS.md"
 section=$(run_section7 "$home")
-assert_grep "$section" "FAIL  gemini: ~/.gemini/AGENTS.md is not a symlink to $home/github/agents/GEMINI\.md \(run: ic-link\)" \
+assert_grep "$section" 'FAIL  gemini: ~/.gemini/AGENTS.md is missing or not a symlink to ~/github/agents/GEMINI\.md \(run: ic-link\)' \
   "fails naming the source when ~/.gemini/AGENTS.md is not linked"
+
+# --- a hand-made link at another tool's manual is a FAIL in every state ---
+home=$(new_home gemini-claude-pointer)
+plant_wiring "$home"
+plant_gemini "$home"
+ln -sfn "$home/.claude/CLAUDE.md" "$home/.gemini/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" "FAIL  gemini: ~/.gemini/AGENTS.md points at $home/.claude/CLAUDE\.md, not ~/github/agents/GEMINI\.md \(run: ic-link\)" \
+  "fails naming Claude's manual as the target when ~/.gemini/AGENTS.md points at it"
+assert_line_count "$section" 'FAIL .*\.gemini/AGENTS\.md' 1 \
+  "a mislinked ~/.gemini/AGENTS.md yields exactly one FAIL line"
+
+# --- and is still a FAIL with no agents repo, the state every hand-made link is in ---
+home=$(new_home gemini-claude-pointer-no-repo)
+mkdir -p "$home/.gemini" "$home/.claude"
+printf '%s\n' '# Claude operating manual' '## Default development system' >"$home/.claude/CLAUDE.md"
+ln -sfn "$home/.claude/CLAUDE.md" "$home/.gemini/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" "FAIL  gemini: ~/.gemini/AGENTS.md points at $home/.claude/CLAUDE\.md, not ~/github/agents/GEMINI\.md \(add ~/github/agents/GEMINI\.md, then run: ic-link\)" \
+  "names Claude's manual as the target even when ~/github/agents is not cloned"
+assert_line_count "$section" 'warn  gemini: private agents repo not cloned' 1 \
+  "still warns once about the uncloned agents repo"
 
 # --- agents repo present but missing the Gemini source ---
 home=$(new_home gemini-no-manual-source)
