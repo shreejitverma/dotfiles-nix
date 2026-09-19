@@ -216,7 +216,9 @@ echo "[7/7] cross-tool defaults"
 # carry the tool-neutral manual when one exists, never Claude's: one tool reading
 # another tool's manual is the exact fault the per-tool build exists to remove.
 agents_md_target="$(readlink "$HOME/AGENTS.md" 2>/dev/null || true)"
-if [ -f "$GH_ROOT/agents/AGENTS.md" ]; then
+if [ ! -f "$HOME/AGENTS.md" ]; then
+  bad "~/AGENTS.md is missing or dangles, so Codex reads nothing (run: ic-link)"
+elif [ -f "$GH_ROOT/agents/AGENTS.md" ]; then
   if [ "$agents_md_target" = "$GH_ROOT/agents/AGENTS.md" ]; then
     ok "~/AGENTS.md -> agents/AGENTS.md (tool-neutral)"
   elif [ "$agents_md_target" = ".claude/CLAUDE.md" ]; then
@@ -224,6 +226,8 @@ if [ -f "$GH_ROOT/agents/AGENTS.md" ]; then
   else
     bad "~/AGENTS.md is not a symlink to $GH_ROOT/agents/AGENTS.md (run: ic-link)"
   fi
+elif [ -d "$GH_ROOT/agents" ]; then
+  bad "~/github/agents/AGENTS.md not generated, so ~/AGENTS.md carries another tool's manual (run: ~/github/agents/bin/build-manuals, then ic-link)"
 elif [ "$agents_md_target" = ".claude/CLAUDE.md" ]; then
   ok "~/AGENTS.md -> ~/.claude/CLAUDE.md (no agents repo; neutral manual unavailable)"
 else

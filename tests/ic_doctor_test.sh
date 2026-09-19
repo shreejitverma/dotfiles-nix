@@ -1,8 +1,13 @@
 #!/bin/bash
 #
-# ic_doctor_test.sh: sandbox regression test for files/bin/ic-doctor's Grok checks.
+# ic_doctor_test.sh: sandbox regression test for files/bin/ic-doctor's per-tool
+# manual checks (the cross-tool ~/AGENTS.md chain, Grok, and Gemini).
 #
 # Runs the real ic-doctor against a fake $HOME. It must:
+#   - accept ~/AGENTS.md linked to the tool-neutral agents/AGENTS.md, fail when
+#     it resolves to Claude's manual instead, fail when it dangles, fail naming
+#     bin/build-manuals when the repo is cloned but the neutral build is not
+#     generated, and accept the Claude fallback only with no agents repo at all
 #   - skip Grok checks when ~/.grok is absent
 #   - accept a single official binary at ~/.local/bin/grok plus GROK.md wiring
 #   - fail when grok on PATH is not ~/.local/bin/grok
@@ -15,9 +20,13 @@
 #   - warn once, without failing, when ~/github/agents is not cloned
 #   - name the missing source when the agents repo lacks GROK.md (FAIL) or
 #     grok/agents (warn only: agent definitions are optional)
+#   - skip Gemini checks when ~/.gemini is absent, and otherwise fail when
+#     ~/.gemini/AGENTS.md is not linked to GEMINI.md, when GEMINI.md is missing
+#     from the repo, when ~/.gemini/GEMINI.md (Gemini's memory file) has been
+#     made a symlink, or when context.fileName does not list AGENTS.md
 #
 # Other ic-doctor sections (checkout path, forks, host binaries) still run and
-# may FAIL; this suite only asserts the Grok lines in section 7.
+# may FAIL; this suite only asserts section 7.
 # Nothing touches the real home directory. Honours DEBUG_KEEP_SANDBOX=1.
 #
 # Run: bash tests/ic_doctor_test.sh
@@ -83,6 +92,8 @@ plant_wiring() {
   local repo="$home/github/agents"
   mkdir -p "$repo/claude" "$repo/grok/agents" "$home/.claude" "$home/.grok/agents"
   printf '%s\n' '# Claude operating manual' '## Default development system' >"$repo/CLAUDE.md"
+  printf '%s\n' '# Tool-neutral manual' '## Default development system' >"$repo/AGENTS.md"
+  printf '%s\n' '# Gemini operating manual' '## Default development system' >"$repo/GEMINI.md"
   printf '%s\n' '# Grok operating manual' '## Default development system' >"$repo/GROK.md"
   printf '%s\n' 'opinions' >"$repo/OPINIONS.md"
   printf '%s\n' 'voice' >"$repo/VOICE.md"
@@ -90,7 +101,7 @@ plant_wiring() {
   printf '%s\n' 'default = "grok-4.6"' >"$repo/grok/config.toml"
   printf '%s\n' '# implementer' >"$repo/grok/agents/implementer.md"
   printf '%s\n' '# reviewer' >"$repo/grok/agents/reviewer.md"
-  ln -sfn ".claude/CLAUDE.md" "$home/AGENTS.md"
+  ln -sfn "$repo/AGENTS.md" "$home/AGENTS.md"
   ln -sf "$repo/CLAUDE.md" "$home/.claude/CLAUDE.md"
   ln -sf "$repo/GROK.md" "$home/.grok/AGENTS.md"
   printf '%s\n' 'auto_update = true' >"$home/.grok/config.toml"
@@ -100,6 +111,14 @@ plant_wiring() {
   ln -sf "$repo/VOICE.md" "$home/VOICE.md"
   ln -sf "$repo/claude/settings.json" "$home/.claude/settings.json"
   plant_grok_skills "$home"
+}
+
+plant_gemini() {
+  local home="$1"
+  mkdir -p "$home/.gemini"
+  printf '%s\n' '## Gemini Added Memories' >"$home/.gemini/GEMINI.md"
+  printf '%s\n' '{"context": {"fileName": ["AGENTS.md", "GEMINI.md"]}}' >"$home/.gemini/settings.json"
+  ln -sfn "$home/github/agents/GEMINI.md" "$home/.gemini/AGENTS.md"
 }
 
 run_section7() {
@@ -283,6 +302,119 @@ assert_grep "$section" 'FAIL  grok: dangling agent links, source gone from ~/git
   "names every link left dangling when the repo has no agent definitions at all"
 assert_not_grep "$section" 'FAIL  (grok|GROK)[^(]*\(run: ic-link\)' \
   "does not offer a bare 'run: ic-link' when the source is absent"
+
+# --- the cross-tool ~/AGENTS.md chain carries the tool-neutral manual ---
+home=$(new_home neutral-manual)
+plant_wiring "$home"
+section=$(run_section7 "$home")
+assert_grep "$section" 'ok    ~/AGENTS.md -> agents/AGENTS.md \(tool-neutral\)' \
+  "accepts ~/AGENTS.md linked to the tool-neutral manual"
+assert_not_grep "$section" 'FAIL  ~/AGENTS.md' \
+  "does not FAIL the cross-tool chain when it carries the neutral manual"
+
+# --- ~/AGENTS.md pointing at Claude's manual while a neutral build exists ---
+home=$(new_home neutral-manual-claude-pointer)
+plant_wiring "$home"
+ln -sfn ".claude/CLAUDE.md" "$home/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" "FAIL  ~/AGENTS.md still resolves to Claude's manual, so Codex reads Claude-only rules \(run: ic-link\)" \
+  "fails when ~/AGENTS.md resolves to Claude's manual though a neutral build exists"
+
+# --- agents repo cloned, neutral manual never generated ---
+home=$(new_home neutral-manual-not-generated)
+plant_wiring "$home"
+rm "$home/github/agents/AGENTS.md"
+ln -sfn ".claude/CLAUDE.md" "$home/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" 'FAIL  ~/github/agents/AGENTS.md not generated.*\(run: ~/github/agents/bin/build-manuals, then ic-link\)' \
+  "fails naming build-manuals when the repo is cloned but the neutral build is missing"
+assert_not_grep "$section" 'ok    ~/AGENTS.md' \
+  "does not report the Claude fallback as ok while the agents repo is cloned"
+
+# --- no agents repo at all: the Claude fallback is the only target there is ---
+home=$(new_home no-agents-repo-fallback)
+mkdir -p "$home/.claude"
+printf '%s\n' '# Claude operating manual' '## Default development system' >"$home/.claude/CLAUDE.md"
+ln -sfn ".claude/CLAUDE.md" "$home/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" 'ok    ~/AGENTS.md -> ~/.claude/CLAUDE.md \(no agents repo; neutral manual unavailable\)' \
+  "accepts the Claude fallback when the agents repo is not cloned"
+
+# --- the same fallback target, with nothing behind it ---
+home=$(new_home agents-md-dangling)
+ln -sfn ".claude/CLAUDE.md" "$home/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" 'FAIL  ~/AGENTS.md is missing or dangles, so Codex reads nothing \(run: ic-link\)' \
+  "fails on a dangling ~/AGENTS.md rather than accepting its target as the fallback"
+
+# --- skip when Gemini is not installed ---
+home=$(new_home gemini-absent)
+plant_wiring "$home"
+section=$(run_section7 "$home")
+assert_grep "$section" 'warn  gemini not set up \(~/.gemini absent\); skipping' \
+  "skips Gemini checks when ~/.gemini is absent"
+assert_not_grep "$section" 'FAIL  gemini' \
+  "does not FAIL gemini checks when ~/.gemini is absent"
+
+# --- healthy Gemini wiring ---
+home=$(new_home gemini-healthy)
+plant_wiring "$home"
+plant_gemini "$home"
+section=$(run_section7 "$home")
+assert_grep "$section" 'ok    gemini: ~/.gemini/AGENTS.md -> agents/GEMINI.md' \
+  "accepts ~/.gemini/AGENTS.md linked to Gemini's own manual"
+assert_grep "$section" 'ok    gemini: context.fileName lists AGENTS.md' \
+  "accepts a settings.json whose context.fileName lists AGENTS.md"
+assert_not_grep "$section" 'FAIL  gemini' \
+  "does not FAIL gemini checks when the manual is linked and actually loaded"
+
+# --- Gemini's own memory file must stay a real file ---
+home=$(new_home gemini-memory-symlinked)
+plant_wiring "$home"
+plant_gemini "$home"
+ln -sfn "$home/github/agents/GEMINI.md" "$home/.gemini/GEMINI.md"
+section=$(run_section7 "$home")
+assert_grep "$section" "FAIL  gemini: ~/.gemini/GEMINI.md is a symlink; it is Gemini's own memory file and must stay a real file" \
+  "fails when Gemini's memory file has been replaced with a symlink"
+
+# --- manual not linked ---
+home=$(new_home gemini-manual-unlinked)
+plant_wiring "$home"
+plant_gemini "$home"
+rm "$home/.gemini/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" "FAIL  gemini: ~/.gemini/AGENTS.md is not a symlink to $home/github/agents/GEMINI\.md \(run: ic-link\)" \
+  "fails naming the source when ~/.gemini/AGENTS.md is not linked"
+
+# --- agents repo present but missing the Gemini source ---
+home=$(new_home gemini-no-manual-source)
+plant_wiring "$home"
+plant_gemini "$home"
+rm "$home/github/agents/GEMINI.md"
+section=$(run_section7 "$home")
+assert_grep "$section" "FAIL  gemini: $home/github/agents/GEMINI\.md missing, so there is no manual to link" \
+  "names the missing GEMINI.md source rather than blaming the link"
+assert_line_count "$section" 'FAIL  gemini' 1 \
+  "a missing GEMINI.md source yields exactly one Gemini FAIL line"
+
+# --- the link alone is not enough: Gemini reads only the listed filenames ---
+home=$(new_home gemini-settings-without-agents-md)
+plant_wiring "$home"
+plant_gemini "$home"
+printf '%s\n' '{"context": {"fileName": ["GEMINI.md"]}}' >"$home/.gemini/settings.json"
+section=$(run_section7 "$home")
+assert_grep "$section" 'FAIL  gemini: ~/.gemini/settings.json context.fileName does not list AGENTS.md, so the linked manual is never loaded' \
+  "fails when context.fileName does not list AGENTS.md"
+
+# --- Gemini installed, private agents repo not cloned ---
+home=$(new_home gemini-no-agents-repo)
+mkdir -p "$home/.gemini"
+printf '%s\n' '{"context": {"fileName": ["AGENTS.md"]}}' >"$home/.gemini/settings.json"
+section=$(run_section7 "$home")
+assert_line_count "$section" 'warn  gemini: private agents repo not cloned; manual not linked' 1 \
+  "warns once when Gemini is installed but ~/github/agents is not cloned"
+assert_not_grep "$section" 'FAIL  gemini' \
+  "does not FAIL gemini checks when ~/github/agents is not cloned"
 
 echo
 if [ "$FAILS" -eq 0 ]; then

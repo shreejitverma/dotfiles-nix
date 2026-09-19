@@ -312,11 +312,11 @@ Logs land in `~/github/.fleet/logs/` with 30-day rotation, and a desktop notific
 `files/bin/ic-doctor` is the read-only health check for the whole system; run it whenever something feels off or after changing the setup.
 
 **6. Cross-tool defaults.**
-`~/.claude/CLAUDE.md` is Claude Code's operating manual and the cross-tool default at `~/AGENTS.md`.
-Its "Default development system" section makes firstmate the default entry point for all AI work and this toolchain the default for every development request.
+Every tool reads its own manual, and no tool reads another's.
+`~/.claude/CLAUDE.md` is Claude Code's, and `~/AGENTS.md` carries the tool-neutral build that Codex and every other `AGENTS.md` reader resolves to.
+The "Default development system" section each of them carries makes firstmate the default entry point for all AI work and this toolchain the default for every development request.
 An agent in a plain session outside firstmate points at `fm` once before working directly.
-Codex reaches the same instructions through `~/AGENTS.md`.
-Grok Build has its own files, versioned next to Claude's in the private agents repo:
+Grok Build and Gemini have their own files too, versioned next to Claude's in the private agents repo:
 
 ```text
 ~/AGENTS.md                 -> ~/github/agents/AGENTS.md   (tool-neutral)
@@ -328,9 +328,8 @@ Grok Build has its own files, versioned next to Claude's in the private agents r
 ~/.gemini/AGENTS.md         -> ~/github/agents/GEMINI.md   (only when ~/.gemini exists)
 ```
 
-Each tool reads its own manual, generated in the private agents repo from one shared source.
-`CLAUDE.md`, `GROK.md` and `GEMINI.md` are per-tool builds, and `AGENTS.md` is the tool-neutral build that Codex and every other `AGENTS.md` reader resolves to, so no tool loads another tool's manual.
-Edit `CORE.md`, `ROUTING.md` or `tools/<tool>.md` in that repo and run its `bin/build-manuals`; never hand-edit a generated manual.
+`CLAUDE.md`, `GROK.md` and `GEMINI.md` are the per-tool builds and `AGENTS.md` is the tool-neutral one, all generated in that repo from one shared source.
+Edit `CORE.md`, `ROUTING.md` or `tools/<tool>.md` there and run its `bin/build-manuals`; never hand-edit a generated manual.
 `ic-link` never points `~/.grok/AGENTS.md` at Claude's file, never creates `~/.grok` (the Grok installer owns that directory), and never touches `~/.grok/hooks/` (firstmate owns the turn-end hook).
 `~/.grok/config.toml` is deliberately not linked: Grok owns that file and rewrites it in place, which replaces any symlink with a regular file.
 `ic-link` never creates, overwrites, or deletes it, and `ic-doctor` does not check it.

@@ -1,15 +1,19 @@
 #!/bin/bash
 #
-# ic_link_test.sh: sandbox regression test for files/bin/ic-link's Grok wiring.
+# ic_link_test.sh: sandbox regression test for files/bin/ic-link's per-tool
+# manual wiring (the cross-tool ~/AGENTS.md chain, Grok, and Gemini).
 #
 # Runs the real ic-link against a fake $HOME. It must:
-#   - never create ~/.grok (the Grok installer owns that directory)
+#   - point ~/AGENTS.md at the tool-neutral agents/AGENTS.md, falling back to
+#     Claude's manual only when the agents repo has no neutral build
+#   - never create ~/.grok or ~/.gemini (each tool's installer owns its own)
 #   - never touch ~/.grok/hooks (firstmate owns the turn-end hook)
-#   - never point ~/.grok/AGENTS.md at Claude's ~/AGENTS.md
+#   - never point ~/.grok/AGENTS.md or ~/.gemini/AGENTS.md at another tool's
+#     manual, and link no manual at all when that tool's source is missing
 #   - never create, link, replace, or delete ~/.grok/config.toml (Grok owns and
-#     rewrites that file)
-#   - link Grok's own AGENTS.md, skills, and agent definitions from
-#     ~/github/agents when that repo is present
+#     rewrites that file) or ~/.gemini/GEMINI.md (Gemini's own memory file)
+#   - link Grok's own AGENTS.md, skills, and agent definitions, and Gemini's
+#     own manual, from ~/github/agents when that repo is present
 #
 # Nothing touches the real home directory or the network.
 # Honours DEBUG_KEEP_SANDBOX=1 to leave the scratch directory on disk.
@@ -106,7 +110,7 @@ assert_eq "$(readlink "$home/.grok/AGENTS.md")" "$home/github/agents/GROK.md" \
 if [ -L "$home/.grok/config.toml" ]; then
   fail "\$HOME/.grok/config.toml was replaced with a symlink"
 else
-  ok "\$HOME/.grok/config.toml is not linked, even with a reference copy in the agents repo"
+  ok "\$HOME/.grok/config.toml is not linked, even when the agents repo carries a config.toml"
 fi
 assert_eq "$(cat "$home/.grok/config.toml" 2>/dev/null)" "auto_update = true" \
   "Grok-written \$HOME/.grok/config.toml content is left untouched"
