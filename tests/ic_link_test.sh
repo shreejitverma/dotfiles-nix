@@ -5,7 +5,8 @@
 #
 # Runs the real ic-link against a fake $HOME. It must:
 #   - point ~/AGENTS.md at the tool-neutral agents/AGENTS.md, falling back to
-#     Claude's manual only when the agents repo has no neutral build
+#     Claude's manual only when the agents repo is not cloned at all, and
+#     refusing to repoint it when the repo is there but the build is not
 #   - never create ~/.grok or ~/.gemini (each tool's installer owns its own)
 #   - never touch ~/.grok/hooks (firstmate owns the turn-end hook)
 #   - never point ~/.grok/AGENTS.md or ~/.gemini/AGENTS.md at another tool's
@@ -132,13 +133,34 @@ assert_eq "$(find "$home/.grok/hooks" -mindepth 1 | wc -l | tr -d ' ')" "1" \
 assert_eq "$(readlink "$home/AGENTS.md")" "$home/github/agents/AGENTS.md" \
   "cross-tool ~/AGENTS.md points at the tool-neutral manual, not Claude's"
 
-# --- no neutral manual: fall back rather than leave ~/AGENTS.md unset ---
+# --- repo cloned, neutral manual not generated: refuse rather than fall back ---
 home=$(new_home agents-md-absent)
 seed_agents_repo "$home"
 rm -f "$home/github/agents/AGENTS.md"
+printf '%s\n' 'preexisting' >"$home/AGENTS.md"
+out=$(HOME="$home" "$REPO_ROOT/files/bin/ic-link" 2>&1)
+rc=$?
+assert_eq "$rc" "0" "ic-link exits 0 when the neutral AGENTS.md is not generated"
+if grep -q "AGENTS.md missing" <<<"$out"; then
+  ok "warns when the neutral AGENTS.md is not generated"
+else
+  fail "should warn when the neutral AGENTS.md is not generated"
+fi
+if grep -q "build-manuals" <<<"$out"; then
+  ok "names build-manuals, the command that generates the neutral manual"
+else
+  fail "should name build-manuals when the neutral manual is not generated"
+fi
+assert_eq "$(readlink "$home/AGENTS.md" 2>/dev/null || echo not-a-symlink)" "not-a-symlink" \
+  "does not repoint \$HOME/AGENTS.md at Claude's manual when the repo is cloned"
+assert_eq "$(cat "$home/AGENTS.md")" "preexisting" \
+  "leaves a preexisting \$HOME/AGENTS.md in place rather than handing Codex Claude-only rules"
+
+# --- no agents repo at all: the Claude target still stands ---
+home=$(new_home agents-md-no-repo)
 run_link "$home"
 assert_eq "$(readlink "$home/AGENTS.md")" ".claude/CLAUDE.md" \
-  "without a neutral manual \$HOME/AGENTS.md falls back to Claude's"
+  "without the private repo \$HOME/AGENTS.md keeps the Claude target"
 
 # --- Gemini: linked only into a directory its installer already made ---
 home=$(new_home gemini-absent)

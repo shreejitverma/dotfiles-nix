@@ -353,18 +353,20 @@ if [ -d "$HOME/.gemini" ]; then
   if [ -f "$GH_ROOT/agents/GEMINI.md" ]; then
     gemini_manual_fix="run: ic-link"
   else
-    gemini_manual_fix="add ~/github/agents/GEMINI.md, then run: ic-link"
+    gemini_manual_fix="run: ~/github/agents/bin/build-manuals, then ic-link"
   fi
   gemini_manual=$(readlink "$HOME/.gemini/AGENTS.md" 2>/dev/null)
   if [ -n "$gemini_manual" ] && [ "$gemini_manual" != "$GH_ROOT/agents/GEMINI.md" ]; then
     bad "gemini: ~/.gemini/AGENTS.md points at $gemini_manual, not ~/github/agents/GEMINI.md ($gemini_manual_fix)"
   fi
   if [ ! -d "$GH_ROOT/agents" ]; then
-    if [ -z "$gemini_manual" ]; then
-      warn "gemini: private agents repo not cloned; manual not linked"
+    if [ "$gemini_manual" = "$GH_ROOT/agents/GEMINI.md" ]; then
+      warn "gemini: ~/.gemini/AGENTS.md points at ~/github/agents/GEMINI.md, which does not exist until the private agents repo is cloned"
+    else
+      warn "gemini: private agents repo not cloned (~/github/agents); manual not checked"
     fi
   elif [ ! -f "$GH_ROOT/agents/GEMINI.md" ]; then
-    bad "gemini: $GH_ROOT/agents/GEMINI.md missing, so there is no manual to link"
+    bad "gemini: $GH_ROOT/agents/GEMINI.md missing, so there is no manual to link ($gemini_manual_fix)"
   elif [ "$gemini_manual" = "$GH_ROOT/agents/GEMINI.md" ]; then
     ok "gemini: ~/.gemini/AGENTS.md -> agents/GEMINI.md"
     # The link alone does nothing: Gemini reads only the filenames listed here.

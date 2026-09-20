@@ -466,12 +466,23 @@ mkdir -p "$home/.gemini" "$home/.claude"
 printf '%s\n' '# Claude operating manual' '## Default development system' >"$home/.claude/CLAUDE.md"
 ln -sfn "$home/.claude/CLAUDE.md" "$home/.gemini/AGENTS.md"
 section=$(run_section7 "$home")
-assert_grep "$section" "FAIL  gemini: ~/.gemini/AGENTS.md points at $home/.claude/CLAUDE\.md, not ~/github/agents/GEMINI\.md \(add ~/github/agents/GEMINI\.md, then run: ic-link\)" \
+assert_grep "$section" "FAIL  gemini: ~/.gemini/AGENTS.md points at $home/.claude/CLAUDE\.md, not ~/github/agents/GEMINI\.md \(run: ~/github/agents/bin/build-manuals, then ic-link\)" \
   "names Claude's manual as the target even when ~/github/agents is not cloned"
-assert_not_grep "$section" 'warn  gemini: private agents repo not cloned' \
+assert_not_grep "$section" 'gemini.*manual not linked' \
   "does not also claim no manual is linked, when the wrong one is"
-assert_line_count "$section" '(FAIL|warn)  gemini' 1 \
-  "the mislink is the only thing said about Gemini in that state"
+assert_grep "$section" 'warn  gemini: private agents repo not cloned \(~/github/agents\); manual not checked' \
+  "says what was not checked rather than asserting a link state"
+
+# --- a hand-made link at the manual a missing repo would provide ---
+home=$(new_home gemini-dangling-no-repo)
+mkdir -p "$home/.gemini"
+printf '%s\n' '## Gemini Added Memories' >"$home/.gemini/GEMINI.md"
+ln -sfn "$home/github/agents/GEMINI.md" "$home/.gemini/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" 'warn  gemini: ~/.gemini/AGENTS.md points at ~/github/agents/GEMINI.md, which does not exist until the private agents repo is cloned' \
+  "reports a dangling hand-made link rather than falling silent about Gemini"
+assert_line_count "$section" '(ok|warn|FAIL)  gemini' 1 \
+  "says exactly one thing about Gemini in that state"
 
 # --- agents repo present but missing the Gemini source ---
 home=$(new_home gemini-no-manual-source)
@@ -479,8 +490,8 @@ plant_wiring "$home"
 plant_gemini "$home"
 rm "$home/github/agents/GEMINI.md"
 section=$(run_section7 "$home")
-assert_grep "$section" "FAIL  gemini: $home/github/agents/GEMINI\.md missing, so there is no manual to link" \
-  "names the missing GEMINI.md source rather than blaming the link"
+assert_grep "$section" "FAIL  gemini: $home/github/agents/GEMINI\.md missing, so there is no manual to link \(run: ~/github/agents/bin/build-manuals, then ic-link\)" \
+  "names build-manuals, since GEMINI.md is generated and must not be hand-written"
 assert_line_count "$section" 'FAIL  gemini' 1 \
   "a missing GEMINI.md source yields exactly one Gemini FAIL line"
 
@@ -498,7 +509,7 @@ home=$(new_home gemini-no-agents-repo)
 mkdir -p "$home/.gemini"
 printf '%s\n' '{"context": {"fileName": ["GEMINI.md"]}}' >"$home/.gemini/settings.json"
 section=$(run_section7 "$home")
-assert_line_count "$section" 'warn  gemini: private agents repo not cloned; manual not linked' 1 \
+assert_line_count "$section" 'warn  gemini: private agents repo not cloned \(~/github/agents\); manual not checked' 1 \
   "warns once when Gemini is installed but ~/github/agents is not cloned"
 assert_not_grep "$section" 'FAIL  gemini' \
   "does not blame context.fileName on a fresh Gemini install with no manual to load"
@@ -507,7 +518,7 @@ assert_not_grep "$section" 'FAIL  gemini' \
 home=$(new_home gemini-no-agents-repo-no-settings)
 mkdir -p "$home/.gemini"
 section=$(run_section7 "$home")
-assert_line_count "$section" 'warn  gemini: private agents repo not cloned; manual not linked' 1 \
+assert_line_count "$section" 'warn  gemini: private agents repo not cloned \(~/github/agents\); manual not checked' 1 \
   "warns once when Gemini is installed with no settings.json at all"
 assert_not_grep "$section" 'FAIL  gemini' \
   "does not FAIL on a missing settings.json when no manual is linked"

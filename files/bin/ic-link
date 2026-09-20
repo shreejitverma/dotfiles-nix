@@ -83,6 +83,8 @@ done
 AGENTS_REPO="$GH_ROOT/agents"
 if [ -f "$AGENTS_REPO/AGENTS.md" ]; then
   ln -sfn "$AGENTS_REPO/AGENTS.md" "$HOME/AGENTS.md"
+elif [ -d "$AGENTS_REPO" ]; then
+  echo "ic-link: warning: $AGENTS_REPO/AGENTS.md missing; not pointing ~/AGENTS.md at another tool's manual (run: $AGENTS_REPO/bin/build-manuals)" >&2
 else
   ln -sfn ".claude/CLAUDE.md" "$HOME/AGENTS.md"
 fi
