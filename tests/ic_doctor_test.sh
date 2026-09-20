@@ -437,8 +437,8 @@ plant_wiring "$home"
 plant_gemini "$home"
 ln -sfn "$home/github/agents/GEMINI.md" "$home/.gemini/GEMINI.md"
 section=$(run_section7 "$home")
-assert_grep "$section" "FAIL  gemini: ~/.gemini/GEMINI.md is a symlink; it is Gemini's own memory file and must stay a real file" \
-  "fails when Gemini's memory file has been replaced with a symlink"
+assert_grep "$section" "FAIL  gemini: ~/.gemini/GEMINI.md is a symlink; it is Gemini's own memory file and must stay a real file \(replace the link with a real file holding what it points at\)" \
+  "fails when Gemini's memory file has been replaced with a symlink, naming the fix"
 
 # --- manual not linked ---
 home=$(new_home gemini-manual-unlinked)
@@ -466,8 +466,10 @@ mkdir -p "$home/.gemini" "$home/.claude"
 printf '%s\n' '# Claude operating manual' '## Default development system' >"$home/.claude/CLAUDE.md"
 ln -sfn "$home/.claude/CLAUDE.md" "$home/.gemini/AGENTS.md"
 section=$(run_section7 "$home")
-assert_grep "$section" "FAIL  gemini: ~/.gemini/AGENTS.md points at $home/.claude/CLAUDE\.md, not ~/github/agents/GEMINI\.md \(run: ~/github/agents/bin/build-manuals, then ic-link\)" \
-  "names Claude's manual as the target even when ~/github/agents is not cloned"
+assert_grep "$section" "FAIL  gemini: ~/.gemini/AGENTS.md points at $home/.claude/CLAUDE\.md, not ~/github/agents/GEMINI\.md \(clone ~/github/agents, then run: ic-link\)" \
+  "names Claude's manual as the target, and the clone to do first, when ~/github/agents is absent"
+assert_not_grep "$section" 'gemini.*bin/build-manuals' \
+  "does not name a build script that is not on disk until the repo is cloned"
 assert_not_grep "$section" 'gemini.*manual not linked' \
   "does not also claim no manual is linked, when the wrong one is"
 assert_grep "$section" 'warn  gemini: private agents repo not cloned \(~/github/agents\); manual not checked' \
@@ -501,8 +503,8 @@ plant_wiring "$home"
 plant_gemini "$home"
 printf '%s\n' '{"context": {"fileName": ["GEMINI.md"]}}' >"$home/.gemini/settings.json"
 section=$(run_section7 "$home")
-assert_grep "$section" 'FAIL  gemini: ~/.gemini/settings.json context.fileName does not list AGENTS.md, so the linked manual is never loaded' \
-  "fails when context.fileName does not list AGENTS.md"
+assert_grep "$section" 'FAIL  gemini: ~/.gemini/settings.json context.fileName does not list AGENTS.md, so the linked manual is never loaded \(add "AGENTS.md" to context.fileName by hand; ic-link never writes settings.json, which is Gemini.s own file\)' \
+  "fails naming the hand step, since ic-link deliberately never writes settings.json"
 
 # --- Gemini installed, private agents repo not cloned ---
 home=$(new_home gemini-no-agents-repo)

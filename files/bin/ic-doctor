@@ -348,12 +348,14 @@ else
 fi
 if [ -d "$HOME/.gemini" ]; then
   if [ -L "$HOME/.gemini/GEMINI.md" ]; then
-    bad "gemini: ~/.gemini/GEMINI.md is a symlink; it is Gemini's own memory file and must stay a real file"
+    bad "gemini: ~/.gemini/GEMINI.md is a symlink; it is Gemini's own memory file and must stay a real file (replace the link with a real file holding what it points at)"
   fi
   if [ -f "$GH_ROOT/agents/GEMINI.md" ]; then
     gemini_manual_fix="run: ic-link"
-  else
+  elif [ -d "$GH_ROOT/agents" ]; then
     gemini_manual_fix="run: ~/github/agents/bin/build-manuals, then ic-link"
+  else
+    gemini_manual_fix="clone ~/github/agents, then run: ic-link"
   fi
   gemini_manual=$(readlink "$HOME/.gemini/AGENTS.md" 2>/dev/null)
   if [ -n "$gemini_manual" ] && [ "$gemini_manual" != "$GH_ROOT/agents/GEMINI.md" ]; then
@@ -373,7 +375,7 @@ if [ -d "$HOME/.gemini" ]; then
     if grep -q '"AGENTS.md"' "$HOME/.gemini/settings.json" 2>/dev/null; then
       ok "gemini: context.fileName lists AGENTS.md"
     else
-      bad "gemini: ~/.gemini/settings.json context.fileName does not list AGENTS.md, so the linked manual is never loaded"
+      bad "gemini: ~/.gemini/settings.json context.fileName does not list AGENTS.md, so the linked manual is never loaded (add \"AGENTS.md\" to context.fileName by hand; ic-link never writes settings.json, which is Gemini's own file)"
     fi
     if grep -q "Default development system" "$GH_ROOT/agents/GEMINI.md" 2>/dev/null; then
       ok "GEMINI.md declares the default development system"
