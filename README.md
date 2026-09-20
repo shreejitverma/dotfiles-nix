@@ -365,7 +365,7 @@ This is the full map; if something is installed and not listed here, it is unman
 | User packages | `nix/home/common.nix` `home.packages` | `git curl wget jq fd fastfetch ripgrep killall lazygit tree bun rustup zip unzip just dust duf procs sd btop tokei tealdeer uv ruff difftastic` |
 | User programs | `nix/home/common.nix` `programs.*` | `git`+`delta`, `starship`, `bat`, `fzf`, `zoxide`, `atuin`, `direnv`, `zsh`, `eza` |
 | Desktop layer | `nix/home/desktop.nix` | fonts (Hack Nerd Font, Roboto, Noto, Font Awesome) and the linked WezTerm and herdr configs |
-| Manual Homebrew | `brew` (not yet declared in nix) | formulas `node`, `go`, `gh`; casks `google-chrome` (required by chrome-devtools-axi), `codex` |
+| Manual Homebrew | `brew` (not yet declared in nix) | formulas `node`, `go`, `gh`, `gemini-cli`; casks `google-chrome` (required by chrome-devtools-axi), `codex` |
 | npm globals | `npm install -g` | `pnpm` (build tool for all Node forks) |
 | Native installers | vendor scripts | `claude` (Claude Code, `curl -fsSL https://claude.ai/install.sh \| bash`); `grok` (xAI Grok Build, `curl -fsSL https://x.ai/cli/install.sh \| bash`, binary at `~/.local/bin/grok`) |
 | Go builds | `sync-forks` / manual | `no-mistakes`, `treehouse` into `~/go/bin` |
@@ -374,7 +374,7 @@ This is the full map; if something is installed and not listed here, it is unman
 | Symlink farm | `ic-link` | all skill, instruction-chain, and personal-layer links |
 
 Known gap, on purpose: the "Manual Homebrew" row is not yet declared in `nix/host.nix`.
-Moving those five entries into `homebrew.brews`/`homebrew.casks` would make them declarative; until then, this table is their record.
+Moving those six entries into `homebrew.brews`/`homebrew.casks` would make them declarative; until then, this table is their record.
 
 ### From scratch: the full setup, step by step
 
@@ -409,6 +409,7 @@ And the AI coding tools themselves:
 curl -fsSL https://claude.ai/install.sh | bash   # Claude Code -> ~/.local/bin/claude
 brew install --cask codex                        # Codex CLI
 curl -fsSL https://x.ai/cli/install.sh | bash    # Grok Build (xAI) -> ~/.local/bin/grok
+brew install gemini-cli                          # Gemini CLI (Google); owns ~/.gemini, which ic-link links into
 ```
 
 **Step 1: authenticate GitHub and create the commit-signing key.**
@@ -465,13 +466,13 @@ done
 ```
 
 **Step 5: clone the private personal layer.**
-The agent operating manual (`CLAUDE.md` with its "Default development system" section), `OPINIONS.md`, `VOICE.md`, and Claude settings live in a private repo so they are version controlled without being published:
+The agent operating manuals (the tool-neutral `AGENTS.md` and the per-tool `CLAUDE.md`, `GROK.md`, and `GEMINI.md`, each carrying the "Default development system" section), `OPINIONS.md`, `VOICE.md`, and Claude settings live in a private repo so they are version controlled without being published:
 
 ```bash
 git clone https://github.com/<you>/agents.git ~/github/agents
 ```
 
-If you are reproducing this setup for yourself, create that private repo first with your own `CLAUDE.md` and `GROK.md`; this repo's `files/skills/ship/SKILL.md` and the layer descriptions above tell you what they need to contain.
+If you are reproducing this setup for yourself, create that private repo first with your own shared source and its `bin/build-manuals` (see the cross-tool layer above); this repo's `files/skills/ship/SKILL.md` and the layer descriptions above tell you what the generated manuals need to contain.
 
 **Step 6: wire every symlink with one command.**
 
@@ -479,7 +480,7 @@ If you are reproducing this setup for yourself, create that private repo first w
 ic-link
 ```
 
-`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills`, `~/.codex/skills`, and (when Grok is installed) `~/.grok/skills`, the `~/AGENTS.md` and `~/.codex/AGENTS.md` chain, Grok's own `AGENTS.md` and agent definitions from `~/github/agents`, and the rest of the personal-layer links (skipped with a note if that repo is absent).
+`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills`, `~/.codex/skills`, and (when Grok is installed) `~/.grok/skills`, the tool-neutral `~/AGENTS.md` and `~/.codex/AGENTS.md` chain, Grok's own `AGENTS.md` and agent definitions and (when Gemini is installed) `~/.gemini/AGENTS.md` from `~/github/agents`, and the rest of the personal-layer links (skipped with a note if that repo is absent).
 Rerun it any time; it repairs stale links in place.
 
 **Step 7: enable the daily sync.**
@@ -498,6 +499,8 @@ quota-axi needs macOS Keychain access once to read live Claude quota (click "Alw
 ```bash
 quota-axi --allow-keychain-prompt auth
 ```
+
+Gemini needs `AGENTS.md` added to `context.fileName` in `~/.gemini/settings.json` by hand, once; `ic-link` deliberately never writes that file (cross-tool layer above), and `ic-doctor` FAILs until the entry is there.
 
 wheelhouse is configured on GitHub, not locally: commit your fleet of repos to your fork, enable Actions on it, and add the secrets its README lists.
 That fleet-config commit makes the wheelhouse fork diverged, so `sync-forks` reports it and leaves it untouched rather than ever merging over it.
@@ -535,8 +538,9 @@ npx skills add <owner>/<repo> --skill <name> -g   # -g = all projects (~/.claude
 ic-doctor
 ```
 
-`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the daily sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md`, codex `AGENTS.md` and skills, and Grok's separate `AGENTS.md`, skills, and agent definitions, plus the `grok` binary resolving to `~/.local/bin/grok` with no second copy on `PATH`).
-A `~/.grok/AGENTS.md` that points anywhere other than `GROK.md` is a FAIL naming the actual target, reported whether or not `GROK.md` or the agents repo exists, because one tool silently loading another tool's operating manual is the fault this layer exists to prevent.
+`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`; every skill symlink in both directories; the daily sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md` and the tool-neutral manual behind it, codex `AGENTS.md` and skills, Grok's separate `AGENTS.md`, skills, and agent definitions, plus the `grok` binary resolving to `~/.local/bin/grok` with no second copy on `PATH`, and Gemini's `~/.gemini/AGENTS.md` with the `context.fileName` entry that loads it).
+A `~/.grok/AGENTS.md` or `~/.gemini/AGENTS.md` that points anywhere other than its own tool's manual is a FAIL naming the actual target, reported whether or not that manual or the agents repo exists, because one tool silently loading another tool's operating manual is the fault this layer exists to prevent.
+A `~/AGENTS.md` still resolving to `~/.claude/CLAUDE.md` while the neutral build exists is the same FAIL; that target is only `ok` when the agents repo is absent, since there is then no neutral manual to point at.
 Agent definitions are optional: an agents repo with no `grok/agents/*.md` is only a warning, while a definition that exists but is not linked is a FAIL.
 A link in `~/.grok/agents` left dangling because its definition was renamed or removed in the agents repo is a FAIL that names the link and the `rm` that clears it; `ic-link` only writes its own links and never deletes inside `~/.grok`.
 When Grok is installed but `~/github/agents` is not cloned, the remaining repo-backed Grok checks are skipped with a single warning, the same way the Claude personal layer is.
