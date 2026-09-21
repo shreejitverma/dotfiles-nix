@@ -427,12 +427,18 @@ cd ~/github
 me=$(gh api user -q .login)
 for repo in axi chrome-devtools-axi firstmate gh-axi gnhf lavish-axi \
             no-mistakes quota-axi tasks-axi treehouse wheelhouse; do
-  gh repo fork "kunchenguid/$repo" --clone=false
+  parent=kunchenguid
+  case "$repo" in
+    wheelhouse) parent=ImZoomBoy ;;
+  esac
+  gh repo fork "$parent/$repo" --clone=false
   git clone "https://github.com/$me/$repo.git"
-  git -C "$repo" remote add upstream "https://github.com/kunchenguid/$repo.git"
+  git -C "$repo" remote add upstream "https://github.com/$parent/$repo.git"
   git -C "$repo" fetch upstream
 done
 ```
+
+wheelhouse forks from `ImZoomBoy/wheelhouse` because the original `kunchenguid/wheelhouse` repository was removed.
 
 **Step 3: build the Go tools into `~/go/bin`.**
 
