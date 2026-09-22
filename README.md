@@ -302,6 +302,9 @@ Logs land in `~/github/.fleet/logs/` with 30-day rotation, and a desktop notific
 
 **5. Shell ergonomics.**
 `files/zsh/ic-workflow.zsh` wires the tools into the shell: `th` (treehouse), `nm` (no-mistakes), `gn` (gnhf), `cda` (chrome-devtools-axi), `ta` (tasks-axi), `qa` (quota-axi), `fm` (firstmate), `syncforks`, and `icdoctor`.
+On macOS it also wraps `claude` and `grok` so each invocation gets `TYPESAFE_API_KEY` from the login Keychain (service `typesafe-api-key`) for the compact-adviser plugin, and nothing else does.
+The key is scoped rather than exported because firstmate's typed dispatch presence-gates on the same variable, and Claude's `/compact-adviser` menu would save it into the git-tracked agents `settings.json`.
+Store or rotate it with `security add-generic-password -U -a "$USER" -s typesafe-api-key -w`; the first mate `fm` starts and unattended agent runs bypass the wrapper and get no key.
 `files/bin/ic-doctor` is the read-only health check for the whole system; run it whenever something feels off or after changing the setup.
 
 **6. Cross-tool defaults.**
