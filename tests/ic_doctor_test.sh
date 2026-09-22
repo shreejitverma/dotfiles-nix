@@ -81,6 +81,26 @@ plant_grok_bin() {
   chmod +x "$dest"
 }
 
+# Stub quota-axi so the auth section can be exercised without a live provider.
+# `mode` picks the shape the real tool emits: a quota row with a numeric
+# percentage when it can read the provider, or attention lines whose third
+# field is a word when it cannot (rate limited, or not authenticated).
+plant_quota_axi() {
+  local dest="$1" mode="$2"
+  mkdir -p "$(dirname "$dest")"
+  {
+    printf '%s\n' '#!/bin/bash'
+    printf '%s\n' 'echo "quota[2]{provider,scope,effectivePercentRemaining}:"'
+    if [ "$mode" = readable ]; then
+      printf '%s\n' 'echo "  claude,all_models,63,0.8425,through_reset,established,five_hour"'
+    else
+      printf '%s\n' 'echo "  claude,all,stale,\"fetch failed rate limited\",none"'
+      printf '%s\n' 'echo "  claude,all_models,headroom_unknown,five_hour + seven_day,none"'
+    fi
+  } >"$dest"
+  chmod +x "$dest"
+}
+
 plant_grok_skills() {
   local home="$1"
   local s
@@ -533,6 +553,31 @@ rm "$home/github/agents/GEMINI.md" "$home/.gemini/settings.json"
 section=$(run_section7 "$home")
 assert_line_count "$section" 'FAIL  gemini' 1 \
   "names only the missing GEMINI.md source, never context.fileName, when nothing is linked"
+
+run_section6() {
+  local home="$1" log
+  log="$SANDBOX/$(basename "$home").auth.log"
+  env -u NVM_DIR HOME="$home" "$REPO_ROOT/files/bin/ic-doctor" >"$log" 2>&1 || true
+  awk '/\[6\/7\]/,/\[7\/7\]/' "$log"
+}
+
+# --- quota-axi readable: the check must pass ---
+home=$(new_home quota-readable)
+plant_quota_axi "$home/.local/bin/quota-axi" readable
+section=$(run_section6 "$home")
+assert_grep "$section" 'ok    quota-axi reads live claude quota' \
+  "a quota row with a numeric percentage reads as live claude quota"
+
+# --- quota-axi cannot read the provider: the check must warn, not pass ---
+# The attention lines here also start with "  claude," so this is what stops the
+# check being satisfied by any line mentioning the provider.
+home=$(new_home quota-unreadable)
+plant_quota_axi "$home/.local/bin/quota-axi" unreadable
+section=$(run_section6 "$home")
+assert_grep "$section" 'warn  quota-axi cannot read claude quota' \
+  "attention lines alone do not count as a live claude quota read"
+assert_not_grep "$section" 'ok    quota-axi reads live claude quota' \
+  "an unreadable provider never reports the quota read as ok"
 
 echo
 if [ "$FAILS" -eq 0 ]; then

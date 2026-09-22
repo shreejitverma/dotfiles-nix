@@ -204,10 +204,16 @@ else
   bad "gh not authenticated (run: gh auth login)"
 fi
 if command -v quota-axi >/dev/null 2>&1; then
-  if quota-axi --provider claude 2>/dev/null | grep -q ",fresh,"; then
+  # Match a real quota row: provider, scope, then a numeric percentage. The
+  # ",fresh," this used to grep for lives in the providers block, which only
+  # `--full` emits, so the check could never pass and warned on every healthy
+  # run. Matching the row shape also steps around the attention lines, whose
+  # third field is a word such as "stale" or "headroom_unknown" rather than a
+  # number, so a rate-limited or unauthenticated read still warns.
+  if quota-axi --provider claude 2>/dev/null | grep -qE '^  claude,[^,]+,[0-9]+,'; then
     ok "quota-axi reads live claude quota"
   else
-    warn "quota-axi cannot read claude quota (run: quota-axi --allow-keychain-prompt auth)"
+    warn "quota-axi cannot read claude quota; its own attention block says whether that is auth (run: quota-axi --allow-keychain-prompt auth) or a transient rate limit"
   fi
 fi
 

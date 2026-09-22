@@ -5,7 +5,7 @@ bash tests/mac_setup_test.sh        # setup/mac.sh, stubbed
 bash tests/install_dispatch_test.sh # setup/install.sh detection and dispatch, stubbed
 bash tests/sync_forks_test.sh       # files/bin/sync-forks, sandboxed git fixtures
 bash tests/ic_link_test.sh          # files/bin/ic-link per-tool manual wiring, sandboxed HOME
-bash tests/ic_doctor_test.sh        # files/bin/ic-doctor cross-tool checks (section 7), sandboxed HOME
+bash tests/ic_doctor_test.sh        # files/bin/ic-doctor auth and cross-tool checks (sections 6 and 7), sandboxed HOME
 bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
 
@@ -113,6 +113,14 @@ It covers:
 - an agents repo without `GROK.md`, where `ic-link` must exit 0, warn, leave a preexisting `~/.grok/AGENTS.md` in place, and never fall back to Claude's file
 
 ## ic_doctor_test.sh
+
+It also covers the section 6 auth check, with `quota-axi` stubbed so no live provider is needed:
+
+- a quota row carrying a numeric percentage reads as a live claude quota read and reports `ok`
+- attention lines alone, whose third field is a word such as `stale` or `headroom_unknown`, do not satisfy the check and report `warn`
+- the same unreadable case never reports the read as `ok`
+
+That last pair is the regression this suite exists to hold: the check previously grepped for `,fresh,`, which only the `--full` output emits, so it warned on every healthy run.
 
 Runs the real `files/bin/ic-doctor` against fake `$HOME` directories and asserts only section 7, cut from the output at the `[7/7]` header.
 The other sections still run against the fake `HOME` and the host, and may FAIL there; that is expected and not asserted.
