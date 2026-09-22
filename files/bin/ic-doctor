@@ -10,7 +10,8 @@
 #      timer on Linux) and the newest fleet sync log
 #   6. auth (gh, quota-axi keychain access)
 #   7. cross-tool defaults (~/AGENTS.md chain, codex AGENTS.md and skills,
-#      grok AGENTS.md / agent definitions / skills / binary)
+#      grok AGENTS.md / agent definitions / skills / binary,
+#      gemini AGENTS.md and its context.fileName setting)
 #
 # Read-only: it never mutates anything. Exits non-zero if any check FAILs;
 # warns are informational and do not affect the exit code.
@@ -203,16 +204,50 @@ else
   bad "gh not authenticated (run: gh auth login)"
 fi
 if command -v quota-axi >/dev/null 2>&1; then
-  if quota-axi --provider claude 2>/dev/null | grep -q ",fresh,"; then
+  # Match a real quota row: provider, scope, then a numeric percentage. The
+  # ",fresh," this used to grep for lives in the providers block, which only
+  # `--full` emits, so the check could never pass and warned on every healthy
+  # run. Matching the row shape also steps around the attention lines, whose
+  # third field is a word such as "stale" or "headroom_unknown" rather than a
+  # number, so a rate-limited or unauthenticated read still warns.
+  if quota-axi --provider claude 2>/dev/null | grep -qE '^  claude,[^,]+,[0-9]+,'; then
     ok "quota-axi reads live claude quota"
   else
-    warn "quota-axi cannot read claude quota (run: quota-axi --allow-keychain-prompt auth)"
+    warn "quota-axi cannot read claude quota; its own attention block says whether that is auth (run: quota-axi --allow-keychain-prompt auth) or a transient rate limit"
   fi
 fi
 
 echo "[7/7] cross-tool defaults"
-if [ -f "$HOME/AGENTS.md" ] && [ "$(readlink "$HOME/AGENTS.md")" = ".claude/CLAUDE.md" ]; then
-  ok "~/AGENTS.md -> ~/.claude/CLAUDE.md"
+# ~/AGENTS.md is what Codex and every other AGENTS.md reader resolves to. It must
+# carry the tool-neutral manual when one exists, never Claude's: one tool reading
+# another tool's manual is the exact fault the per-tool build exists to remove.
+agents_md_target="$(readlink "$HOME/AGENTS.md" 2>/dev/null || true)"
+if [ ! -f "$HOME/AGENTS.md" ]; then
+  if [ -f "$GH_ROOT/agents/AGENTS.md" ]; then
+    agents_md_fix="run: ic-link"
+  elif [ -d "$GH_ROOT/agents" ]; then
+    agents_md_fix="run: ~/github/agents/bin/build-manuals, then ic-link"
+  else
+    agents_md_fix="clone ~/github/agents, then run: ic-link"
+  fi
+  bad "~/AGENTS.md is missing or dangles, so Codex reads nothing ($agents_md_fix)"
+elif [ -f "$GH_ROOT/agents/AGENTS.md" ]; then
+  if [ "$agents_md_target" = "$GH_ROOT/agents/AGENTS.md" ]; then
+    ok "~/AGENTS.md -> agents/AGENTS.md (tool-neutral)"
+  elif [ "$agents_md_target" = ".claude/CLAUDE.md" ]; then
+    bad "~/AGENTS.md still resolves to Claude's manual, so Codex reads Claude-only rules (run: ic-link)"
+  else
+    bad "~/AGENTS.md is not a symlink to $GH_ROOT/agents/AGENTS.md (run: ic-link)"
+  fi
+  if grep -q "Default development system" "$GH_ROOT/agents/AGENTS.md" 2>/dev/null; then
+    ok "agents/AGENTS.md declares the default development system"
+  else
+    bad "agents/AGENTS.md missing the 'Default development system' section"
+  fi
+elif [ -d "$GH_ROOT/agents" ]; then
+  bad "~/github/agents/AGENTS.md not generated, so ~/AGENTS.md carries another tool's manual (run: ~/github/agents/bin/build-manuals, then ic-link)"
+elif [ "$agents_md_target" = ".claude/CLAUDE.md" ]; then
+  ok "~/AGENTS.md -> ~/.claude/CLAUDE.md (no agents repo; neutral manual unavailable)"
 else
   bad "~/AGENTS.md is not a symlink to .claude/CLAUDE.md"
 fi
@@ -316,6 +351,48 @@ if [ -d "$HOME/.grok" ]; then
   fi
 else
   warn "grok not set up (~/.grok absent); skipping"
+fi
+if [ -d "$HOME/.gemini" ]; then
+  if [ -L "$HOME/.gemini/GEMINI.md" ]; then
+    bad "gemini: ~/.gemini/GEMINI.md is a symlink; it is Gemini's own memory file and must stay a real file (replace the link with a real file holding what it points at)"
+  fi
+  if [ -f "$GH_ROOT/agents/GEMINI.md" ]; then
+    gemini_manual_fix="run: ic-link"
+  elif [ -d "$GH_ROOT/agents" ]; then
+    gemini_manual_fix="run: ~/github/agents/bin/build-manuals, then ic-link"
+  else
+    gemini_manual_fix="clone ~/github/agents, then run: ic-link"
+  fi
+  gemini_manual=$(readlink "$HOME/.gemini/AGENTS.md" 2>/dev/null)
+  if [ -n "$gemini_manual" ] && [ "$gemini_manual" != "$GH_ROOT/agents/GEMINI.md" ]; then
+    bad "gemini: ~/.gemini/AGENTS.md points at $gemini_manual, not ~/github/agents/GEMINI.md ($gemini_manual_fix)"
+  fi
+  if [ ! -d "$GH_ROOT/agents" ]; then
+    if [ "$gemini_manual" = "$GH_ROOT/agents/GEMINI.md" ]; then
+      warn "gemini: ~/.gemini/AGENTS.md points at ~/github/agents/GEMINI.md, which does not exist until the private agents repo is cloned"
+    else
+      warn "gemini: private agents repo not cloned (~/github/agents); manual not checked"
+    fi
+  elif [ ! -f "$GH_ROOT/agents/GEMINI.md" ]; then
+    bad "gemini: $GH_ROOT/agents/GEMINI.md missing, so there is no manual to link ($gemini_manual_fix)"
+  elif [ "$gemini_manual" = "$GH_ROOT/agents/GEMINI.md" ]; then
+    ok "gemini: ~/.gemini/AGENTS.md -> agents/GEMINI.md"
+    # The link alone does nothing: Gemini reads only the filenames listed here.
+    if grep -q '"AGENTS.md"' "$HOME/.gemini/settings.json" 2>/dev/null; then
+      ok "gemini: context.fileName lists AGENTS.md"
+    else
+      bad "gemini: ~/.gemini/settings.json context.fileName does not list AGENTS.md, so the linked manual is never loaded (add \"AGENTS.md\" to context.fileName by hand; ic-link never writes settings.json, which is Gemini's own file)"
+    fi
+    if grep -q "Default development system" "$GH_ROOT/agents/GEMINI.md" 2>/dev/null; then
+      ok "GEMINI.md declares the default development system"
+    else
+      bad "GEMINI.md missing the 'Default development system' section"
+    fi
+  elif [ -z "$gemini_manual" ]; then
+    bad "gemini: ~/.gemini/AGENTS.md is missing or not a symlink to ~/github/agents/GEMINI.md ($gemini_manual_fix)"
+  fi
+else
+  warn "gemini not set up (~/.gemini absent); skipping"
 fi
 if [ -d "$GH_ROOT/agents" ]; then
   agents_bad=""

@@ -4,12 +4,13 @@
 bash tests/mac_setup_test.sh        # setup/mac.sh, stubbed
 bash tests/install_dispatch_test.sh # setup/install.sh detection and dispatch, stubbed
 bash tests/sync_forks_test.sh       # files/bin/sync-forks, sandboxed git fixtures
-bash tests/ic_link_test.sh          # files/bin/ic-link Grok wiring, sandboxed HOME
-bash tests/ic_doctor_test.sh        # files/bin/ic-doctor Grok checks (section 7), sandboxed HOME
+bash tests/ic_link_test.sh          # files/bin/ic-link per-tool manual wiring, sandboxed HOME
+bash tests/ic_doctor_test.sh        # files/bin/ic-doctor auth and cross-tool checks (sections 6 and 7), sandboxed HOME
 bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
 
 All but the last never install anything and run anywhere.
+`.github/workflows/ci.yml` runs every suite except `linux_e2e_docker.sh` on macOS for each pull request and each push to `main`, alongside shellcheck at warning level over every bash script in the repo.
 `linux_e2e_docker.sh` needs Docker and skips itself when Docker is unavailable.
 All six honour `DEBUG_KEEP_SANDBOX=1`, which leaves the scratch directory each one works in (per scenario, for `mac_setup_test.sh`) on disk for inspection after a failing run instead of removing it on exit.
 
@@ -97,24 +98,37 @@ The fleet manifest, `gh` behaviour, and desktop notifications are the suite's st
 
 Runs the real `files/bin/ic-link` against fake `$HOME` directories under one scratch sandbox and asserts the resulting link state with `readlink`, never the script's source.
 Nothing is stubbed: `ic-link` only creates symlinks under `$HOME`, so re-homing it is the whole isolation.
-Each scenario seeds a fake `~/github/agents` with `CLAUDE.md`, `GROK.md`, `grok/config.toml`, and two agent definitions, unless the scenario is about one of them being absent.
+Each scenario seeds a fake `~/github/agents` with `AGENTS.md` (the tool-neutral build), `CLAUDE.md`, `GEMINI.md`, `GROK.md`, and two agent definitions, unless the scenario is about one of them being absent.
+It also seeds a `grok/config.toml` there, which the real agents repo deliberately does not version: it is a stray that `ic-link` must ignore, so seeding it is what proves the file is skipped by rule rather than only because no copy happens to exist.
 
 It covers:
 
 - `~/.grok` absent, where `ic-link` must not create it (the Grok installer owns that directory)
 - `~/.grok` present without `hooks/` or `config.toml`, where neither may be created (firstmate owns the hook files, Grok owns its config)
-- the full layer, where `~/.grok/AGENTS.md` must point at `GROK.md`, every `grok/agents/*.md` must be linked, the skill mirrors must use the same relative target as the Claude and Codex mirrors, an existing hook file must survive with nothing added beside it, and a Grok-written regular `~/.grok/config.toml` must keep its content and must not become a symlink even though the agents repo carries a reference copy
+- the full layer, where `~/AGENTS.md` must point at the tool-neutral `agents/AGENTS.md` rather than Claude's manual, `~/.grok/AGENTS.md` must point at `GROK.md`, every `grok/agents/*.md` must be linked, the skill mirrors must use the same relative target as the Claude and Codex mirrors, an existing hook file must survive with nothing added beside it, and a Grok-written regular `~/.grok/config.toml` must keep its content and must not become a symlink even with a stray copy sitting in the agents repo
+- an agents repo cloned without the tool-neutral `AGENTS.md` generated, where `ic-link` must refuse to repoint `~/AGENTS.md` at Claude's manual, warn naming `bin/build-manuals`, and leave a preexisting `~/AGENTS.md` untouched: silently handing Codex Claude-only rules is the fault this wiring exists to remove, and `ic-doctor` FAILs that state, so `ic-link` must not create it
+- no agents repo at all, where the previous Claude target still stands, since there is no neutral manual to point at and a dangling link would leave Codex reading nothing
+- `~/.gemini` absent, where `ic-link` must not create it (the Gemini installer owns that directory)
+- `~/.gemini` present, where `~/.gemini/AGENTS.md` must point at `GEMINI.md` while `~/.gemini/GEMINI.md`, Gemini's own memory file, stays a real file with its content untouched
+- an agents repo without `GEMINI.md`, where no `~/.gemini/AGENTS.md` link may be created at all rather than falling back to another tool's manual
 - an agents repo without `GROK.md`, where `ic-link` must exit 0, warn, leave a preexisting `~/.grok/AGENTS.md` in place, and never fall back to Claude's file
 
 ## ic_doctor_test.sh
 
-Runs the real `files/bin/ic-doctor` against fake `$HOME` directories and asserts only the Grok lines of section 7, cut from the output at the `[7/7]` header.
+Runs the real `files/bin/ic-doctor` against fake `$HOME` directories and asserts only section 6 (auth, cut between the `[6/7]` and `[7/7]` headers) and section 7 (cut from the `[7/7]` header).
 The other sections still run against the fake `HOME` and the host, and may FAIL there; that is expected and not asserted.
-The only stub is a fake `grok` executable that prints a version line, planted at `~/.local/bin/grok` or `~/go/bin/grok` inside the fake `HOME`; both directories are on the PATH `ic-doctor` builds for itself (`ic_default_path`).
+There are two stubs, both planted inside the fake `HOME` on the PATH `ic-doctor` builds for itself (`ic_default_path`): a fake `grok` executable that prints a version line, at `~/.local/bin/grok` or `~/go/bin/grok`, and a fake `quota-axi` at `~/.local/bin/quota-axi` that prints either a readable quota row or attention lines only, so section 6 needs no live provider.
 That PATH also includes host directories outside the fake `HOME`, so a real `grok` installed somewhere like `/opt/homebrew/bin` on the host would show up as a second copy; the suite does not mask that.
 
 It covers:
 
+- a `quota-axi` quota row carrying a numeric percentage: the section 6 claude quota read reports `ok`
+- attention lines alone, whose third field is a word such as `stale` or `headroom_unknown`: `warn`, and never `ok`; this pair holds the regression where the check grepped for `,fresh,`, which only the `--full` output emits, so it warned on every healthy run
+- `~/AGENTS.md` linked to the tool-neutral `agents/AGENTS.md`: `ok`, with no FAIL on the cross-tool chain, and the `Default development system` routing section verified in that file rather than only in Claude's, since it is what Codex now loads; a neutral manual that has lost the section is a FAIL beside a still-`ok` `CLAUDE.md`
+- `~/AGENTS.md` resolving to Claude's manual while a neutral build exists: FAIL naming that specific fault, since one tool reading another tool's manual is what the per-tool build exists to remove
+- the agents repo cloned but its `AGENTS.md` never generated: FAIL naming `bin/build-manuals`, never an `ok` for the Claude fallback, which matches how a missing `GROK.md` or `GEMINI.md` source already FAILs
+- no agents repo at all: the Claude fallback is the only target there is, so it is `ok`
+- that same fallback target with no `~/.claude/CLAUDE.md` behind it: FAIL, since a dangling `~/AGENTS.md` means Codex reads nothing, and the remedy follows what is actually missing rather than always naming `ic-link`, which is the command that produced the dangling link: `clone ~/github/agents` with no repo, `bin/build-manuals` with the repo cloned but no neutral `AGENTS.md` generated (a present `CLAUDE.md` is not a substitute, since `ic-link` cannot build the manual this link needs), and `ic-link` alone once that manual exists to point at
 - `~/.grok` absent: one skip warning and no Grok FAIL
 - a healthy install: the binary, the `GROK.md` link, the "Default development system" section, the skill mirrors, and the agent definitions all `ok`, with a Grok-owned regular `~/.grok/config.toml` never mentioned and the Claude personal-layer check unaffected by `~/.grok`
 - `grok` resolving outside `~/.local/bin`, and a second `grok` on PATH: both FAIL, the latter naming the copy to keep and the `npm uninstall` that drops the other
@@ -125,3 +139,13 @@ It covers:
 - Grok installed with `~/github/agents` not cloned: exactly one Grok warning, the skill mirrors still checked, and no Grok FAIL
 - an agents repo with `GROK.md` but no `grok/agents`, which is all the README asks for: exactly one warning naming the absent source and no Grok FAIL, since agent definitions are optional and `ic-link` skips them the same way
 - an agents repo lacking `GROK.md` and `grok/agents`: the missing `GROK.md` is a FAIL naming the source to add rather than a bare `run: ic-link`, which would be a no-op there; the missing `grok/agents` is only a warning, but the links that removal leaves dangling are all named in their own FAIL line, since the dangling scan does not depend on how many definitions the repo still has
+- `~/.gemini` absent: one skip warning and no Gemini FAIL
+- healthy Gemini wiring: `~/.gemini/AGENTS.md` linked to `GEMINI.md`, `context.fileName` listing `AGENTS.md`, and the `Default development system` routing section in `GEMINI.md` are all `ok`, with no Gemini FAIL
+- a `GEMINI.md` that has lost that routing section: FAIL, with the link itself still `ok`, since Gemini is a tool that really loads its manual and all four manuals are verified alike
+- `~/.gemini/GEMINI.md` made a symlink: FAIL, since that is Gemini's own memory file, written by `/memory add`, and must stay a real file
+- `~/.gemini/AGENTS.md` not linked: FAIL naming the source it should point at
+- `~/.gemini/AGENTS.md` pointing at Claude's manual: exactly one FAIL line, naming the actual target; the same FAIL must still appear when `~/github/agents` is not cloned at all, which is the state every hand-made link is in and the one the repo guard used to hide, and there it is the only Gemini FAIL, printed beside the repo-absent warning, whose wording says what was not checked rather than claiming no manual is linked, which would contradict it. Its remedy names the clone to do first, since `bin/build-manuals` is not on disk until the repo is there
+- an agents repo without `GEMINI.md`: exactly one Gemini FAIL, naming the missing source rather than blaming the link
+- `context.fileName` not listing `AGENTS.md` while a manual is linked: FAIL naming the hand step that fixes it, since the link alone never loads; `ic-doctor` checks that setting because `settings.json` is Gemini's file to own and `ic-link` never writes it, so this is the one state every `ic-link`-wired machine starts in
+- Gemini installed with `~/github/agents` not cloned, both with a settings file that has no `AGENTS.md` entry and with no settings file at all (the two states a fresh Gemini install is actually in): exactly one Gemini warning and no Gemini FAIL, since `ic-link` deliberately links nothing there and a check about the linked manual never loading would contradict the warning above it; the same holds for a cloned repo with no `GEMINI.md`, which yields only the missing-source FAIL naming `bin/build-manuals`, since that manual is generated and must not be hand-written
+- a hand-made `~/.gemini/AGENTS.md` pointing at the manual an uncloned repo would provide: a warning naming that dangling target, and exactly one Gemini line. The repo-absent warning is always emitted, so Gemini can never be the one tool that says nothing at all about a broken manual link; it reports what was not checked rather than asserting a link state, so it does not contradict a mislink FAIL above it

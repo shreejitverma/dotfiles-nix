@@ -1,15 +1,20 @@
 #!/bin/bash
 #
-# ic_link_test.sh: sandbox regression test for files/bin/ic-link's Grok wiring.
+# ic_link_test.sh: sandbox regression test for files/bin/ic-link's per-tool
+# manual wiring (the cross-tool ~/AGENTS.md chain, Grok, and Gemini).
 #
 # Runs the real ic-link against a fake $HOME. It must:
-#   - never create ~/.grok (the Grok installer owns that directory)
+#   - point ~/AGENTS.md at the tool-neutral agents/AGENTS.md, falling back to
+#     Claude's manual only when the agents repo is not cloned at all, and
+#     refusing to repoint it when the repo is there but the build is not
+#   - never create ~/.grok or ~/.gemini (each tool's installer owns its own)
 #   - never touch ~/.grok/hooks (firstmate owns the turn-end hook)
-#   - never point ~/.grok/AGENTS.md at Claude's ~/AGENTS.md
+#   - never point ~/.grok/AGENTS.md or ~/.gemini/AGENTS.md at another tool's
+#     manual, and link no manual at all when that tool's source is missing
 #   - never create, link, replace, or delete ~/.grok/config.toml (Grok owns and
-#     rewrites that file)
-#   - link Grok's own AGENTS.md, skills, and agent definitions from
-#     ~/github/agents when that repo is present
+#     rewrites that file) or ~/.gemini/GEMINI.md (Gemini's own memory file)
+#   - link Grok's own AGENTS.md, skills, and agent definitions, and Gemini's
+#     own manual, from ~/github/agents when that repo is present
 #
 # Nothing touches the real home directory or the network.
 # Honours DEBUG_KEEP_SANDBOX=1 to leave the scratch directory on disk.
@@ -41,7 +46,7 @@ assert_file() {
   if [ -e "$1" ]; then ok "$2"; else fail "$2 ($1 missing)"; fi
 }
 assert_no_path() {
-  if [ -e "$1" ]; then fail "$2 ($1 exists)"; else ok "$2"; fi
+  if [ -e "$1" ] || [ -L "$1" ]; then fail "$2 ($1 exists)"; else ok "$2"; fi
 }
 
 new_home() {
@@ -55,10 +60,13 @@ seed_agents_repo() {
   local repo="$home/github/agents"
   mkdir -p "$repo/claude" "$repo/grok/agents"
   printf '%s\n' '# Claude operating manual' >"$repo/CLAUDE.md"
+  printf '%s\n' '# Tool-neutral manual' >"$repo/AGENTS.md"
+  printf '%s\n' '# Gemini operating manual' >"$repo/GEMINI.md"
   printf '%s\n' '# Grok operating manual' '## Default development system' >"$repo/GROK.md"
   printf '%s\n' 'opinions' >"$repo/OPINIONS.md"
   printf '%s\n' 'voice' >"$repo/VOICE.md"
   printf '%s\n' '{}' >"$repo/claude/settings.json"
+  # A stray the real agents repo does not version: ic-link must skip it by rule.
   printf '%s\n' 'default = "grok-4.6"' >"$repo/grok/config.toml"
   printf '%s\n' '# implementer' >"$repo/grok/agents/implementer.md"
   printf '%s\n' '# reviewer' >"$repo/grok/agents/reviewer.md"
@@ -104,7 +112,7 @@ assert_eq "$(readlink "$home/.grok/AGENTS.md")" "$home/github/agents/GROK.md" \
 if [ -L "$home/.grok/config.toml" ]; then
   fail "\$HOME/.grok/config.toml was replaced with a symlink"
 else
-  ok "\$HOME/.grok/config.toml is not linked, even with a reference copy in the agents repo"
+  ok "\$HOME/.grok/config.toml is not linked, even with a stray copy in the agents repo"
 fi
 assert_eq "$(cat "$home/.grok/config.toml" 2>/dev/null)" "auto_update = true" \
   "Grok-written \$HOME/.grok/config.toml content is left untouched"
@@ -122,8 +130,64 @@ assert_eq "$(readlink "$home/.grok/skills/ship")" "../../.agents/skills/ship" \
 assert_file "$home/.grok/hooks/fm-keep.json" "existing firstmate hook file is left in place"
 assert_eq "$(find "$home/.grok/hooks" -mindepth 1 | wc -l | tr -d ' ')" "1" \
   "ic-link does not add files under ~/.grok/hooks"
+assert_eq "$(readlink "$home/AGENTS.md")" "$home/github/agents/AGENTS.md" \
+  "cross-tool ~/AGENTS.md points at the tool-neutral manual, not Claude's"
+
+# --- repo cloned, neutral manual not generated: refuse rather than fall back ---
+home=$(new_home agents-md-absent)
+seed_agents_repo "$home"
+rm -f "$home/github/agents/AGENTS.md"
+printf '%s\n' 'preexisting' >"$home/AGENTS.md"
+out=$(HOME="$home" "$REPO_ROOT/files/bin/ic-link" 2>&1)
+rc=$?
+assert_eq "$rc" "0" "ic-link exits 0 when the neutral AGENTS.md is not generated"
+if grep -q "AGENTS.md missing" <<<"$out"; then
+  ok "warns when the neutral AGENTS.md is not generated"
+else
+  fail "should warn when the neutral AGENTS.md is not generated"
+fi
+if grep -q "build-manuals" <<<"$out"; then
+  ok "names build-manuals, the command that generates the neutral manual"
+else
+  fail "should name build-manuals when the neutral manual is not generated"
+fi
+assert_eq "$(readlink "$home/AGENTS.md" 2>/dev/null || echo not-a-symlink)" "not-a-symlink" \
+  "does not repoint \$HOME/AGENTS.md at Claude's manual when the repo is cloned"
+assert_eq "$(cat "$home/AGENTS.md")" "preexisting" \
+  "leaves a preexisting \$HOME/AGENTS.md in place rather than handing Codex Claude-only rules"
+
+# --- no agents repo at all: the Claude target still stands ---
+home=$(new_home agents-md-no-repo)
+run_link "$home"
 assert_eq "$(readlink "$home/AGENTS.md")" ".claude/CLAUDE.md" \
-  "cross-tool ~/AGENTS.md still points at Claude"
+  "without the private repo \$HOME/AGENTS.md keeps the Claude target"
+
+# --- Gemini: linked only into a directory its installer already made ---
+home=$(new_home gemini-absent)
+seed_agents_repo "$home"
+run_link "$home"
+assert_no_path "$home/.gemini" "ic-link does not create ~/.gemini when the installer has not"
+
+home=$(new_home gemini-present)
+seed_agents_repo "$home"
+mkdir -p "$home/.gemini"
+printf '%s\n' '## Gemini Added Memories' >"$home/.gemini/GEMINI.md"
+run_link "$home"
+assert_eq "$(readlink "$home/.gemini/AGENTS.md")" "$home/github/agents/GEMINI.md" \
+  "\$HOME/.gemini/AGENTS.md points at Gemini's own manual"
+assert_eq "$(readlink "$home/.gemini/GEMINI.md" 2>/dev/null || echo not-a-symlink)" "not-a-symlink" \
+  "Gemini's own memory file is left as a real file"
+assert_eq "$(cat "$home/.gemini/GEMINI.md")" "## Gemini Added Memories" \
+  "Gemini's memories are left untouched"
+
+# --- missing GEMINI.md must not fall back to another tool's manual ---
+home=$(new_home gemini-no-manual)
+seed_agents_repo "$home"
+rm -f "$home/github/agents/GEMINI.md"
+mkdir -p "$home/.gemini"
+run_link "$home"
+assert_no_path "$home/.gemini/AGENTS.md" \
+  "no Gemini manual means no \$HOME/.gemini/AGENTS.md link at all"
 
 # --- missing GROK.md must not fall back to Claude ---
 home=$(new_home grok-no-manual)

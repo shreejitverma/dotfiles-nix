@@ -1,0 +1,65 @@
+name: CI
+
+# These scripts wire the whole machine: ic-link creates the symlinks every AI
+# tool reads its operating manual through, and ic-doctor is what says the wiring
+# is healthy. The repo already carries suites for them, but nothing ran those
+# suites automatically, so every regression in them had to be caught by someone
+# running the suites by hand before committing.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      # Enforced at warning level, which every script in the repo passes today.
+      # Some carry deliberate info-level notes - a trap-invoked function that
+      # looks uncalled, a literal `$` kept unexpanded for parsing nix files -
+      # and rewriting working code to silence those would be churn, not rigour.
+      - name: Lint every bash script
+        run: |
+          set -euo pipefail
+          status=0
+          for f in files/bin/* tests/*.sh setup/*.sh setup/lib/*.sh; do
+            [ -f "$f" ] || continue
+            head -1 "$f" | grep -q bash || continue
+            shellcheck -x --severity=warning "$f" || status=1
+          done
+          exit "$status"
+
+  suites:
+    name: sandboxed suites
+    # macOS is this repo's primary target and the platform the suites are
+    # written against. They never install anything: each one runs the real
+    # script against a sandboxed HOME or a directory of stub executables.
+    # linux_e2e_docker.sh is deliberately excluded, since it needs Docker and
+    # skips itself without it.
+    runs-on: macos-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: ic-link wiring
+        run: bash tests/ic_link_test.sh
+
+      - name: ic-doctor health checks
+        run: bash tests/ic_doctor_test.sh
+
+      - name: install dispatch and platform detection
+        run: bash tests/install_dispatch_test.sh
+
+      - name: fleet sync
+        run: bash tests/sync_forks_test.sh
+
+      - name: mac setup against stubbed installers
+        run: bash tests/mac_setup_test.sh
