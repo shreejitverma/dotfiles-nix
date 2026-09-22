@@ -1,17 +1,85 @@
+onboarding = false
+# Herdr keybindings. Prefix is ctrl+space; every action below is "ctrl+space, then key".
+# The prefix is sticky: press ctrl+space, release, then press the key at any pace.
+# The status bar shows PREFIX while it waits; esc cancels.
+# Each key is used exactly once. Direct (no-prefix) chords are limited to
+# ctrl+shift+alt+arrows, which no shell, editor, or agent uses.
+# Reload after editing: ctrl+space R  (or `herdr server reload-config`).
+
 [keys]
-prefix = "ctrl+b"
-focus_pane_left  = "prefix+h"
-focus_pane_down  = "prefix+j"
-focus_pane_up    = "prefix+k"
-focus_pane_right = "prefix+l"
-split_horizontal = "prefix+double_quote"
-split_vertical    = "prefix+percent"
-new_tab   = "prefix+c"
-close_tab = "prefix+ampersand"
-workspace_picker = "prefix+w"
-goto             = "prefix+g"
-copy_mode  = "prefix+y"  # herdr's copy-mode entry key; copy-mode's own internal keys (v/space select, y/Enter copy, q/Esc cancel) aren't configurable
+prefix = "ctrl+space"
+
+# Session
+help             = "prefix+?"        # show keybinding overlay
+settings         = "prefix+s"        # settings panel
+detach           = "prefix+d"        # detach; `herdr` reattaches (tmux style)
+reload_config    = "prefix+shift+r"  # reload this file
+toggle_sidebar   = "prefix+b"        # show/hide workspace sidebar
+open_notification_target = "prefix+o"  # jump to the pane that raised a notification
+
+# Workspaces (projects, listed vertically in the sidebar)
+new_workspace      = "prefix+shift+n"
+new_worktree       = "prefix+shift+g"   # new git worktree as a workspace
+open_worktree      = "prefix+shift+o"   # open an existing worktree
+remove_worktree    = "prefix+shift+x"   # remove worktree (asks for confirmation)
+workspace_picker   = "prefix+w"
+goto               = "prefix+g"         # navigate mode: arrows/hjkl/1-9, enter, esc
+rename_workspace   = "prefix+shift+w"
+close_workspace    = "prefix+shift+d"
+previous_workspace = "prefix+up"
+next_workspace     = "prefix+down"
+switch_workspace   = "prefix+alt+1..9"  # jump to workspace N
+
+# Tabs (horizontal tab bar inside a workspace)
+new_tab           = "prefix+c"
+switch_tab        = "prefix+1..9"
+next_tab          = "prefix+n"
+previous_tab      = "prefix+p"
+move_tab_previous = "prefix+shift+left"   # reorder tab toward the front
+move_tab_next     = "prefix+shift+right"  # reorder tab toward the back
+rename_tab        = "prefix+shift+t"
+close_tab         = "prefix+ampersand"    # ctrl+space &
+
+# Panes (splits inside a tab)
+split_horizontal    = "prefix+double_quote"  # ctrl+space "  -> top/bottom
+split_vertical      = "prefix+percent"       # ctrl+space %  -> left/right
+focus_pane_left     = "prefix+h"
+focus_pane_down     = "prefix+j"
+focus_pane_up       = "prefix+k"
+focus_pane_right    = "prefix+l"
+cycle_pane_next     = "prefix+tab"
+cycle_pane_previous = "prefix+shift+tab"
+last_pane           = "prefix+semicolon"     # ctrl+space ;  -> toggle with previous pane
+zoom                = "prefix+z"             # fullscreen toggle
+resize_mode         = "prefix+r"             # then arrows/hjkl, esc to leave
+resize_pane_left    = "ctrl+shift+alt+left"  # direct resize, no prefix
+resize_pane_down    = "ctrl+shift+alt+down"
+resize_pane_up      = "ctrl+shift+alt+up"
+resize_pane_right   = "ctrl+shift+alt+right"
+close_pane          = "prefix+x"
+rename_pane         = "prefix+shift+p"
+edit_scrollback     = "prefix+e"             # open scrollback in $EDITOR
+copy_mode           = "prefix+y"             # v/space select, y/enter copy, q/esc exit
+
+# Agents (agent rows in the sidebar)
+previous_agent = "prefix+shift+up"
+next_agent     = "prefix+shift+down"
+
+# Popup commands (session-modal terminal over the current layout)
+[[keys.command]]
+key     = "prefix+alt+g"
+type    = "popup"
+command = "lazygit"
+width   = "85%"
+height  = "85%"
+
+[[keys.command]]
+key     = "prefix+alt+t"
+type    = "popup"
+command = "btop"
+width   = "90%"
+height  = "90%"
 
 [ui]
-# Agents panel order: explicit choice of "spaces" (grouped by space, the default) over "priority".
+prompt_new_tab_name = false
 agent_panel_sort = "spaces"
