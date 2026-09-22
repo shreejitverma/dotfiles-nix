@@ -10,6 +10,7 @@ bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
 
 All but the last never install anything and run anywhere.
+`.github/workflows/ci.yml` runs every suite except `linux_e2e_docker.sh` on macOS for each pull request and each push to `main`, alongside shellcheck at warning level over every bash script in the repo.
 `linux_e2e_docker.sh` needs Docker and skips itself when Docker is unavailable.
 All six honour `DEBUG_KEEP_SANDBOX=1`, which leaves the scratch directory each one works in (per scenario, for `mac_setup_test.sh`) on disk for inspection after a failing run instead of removing it on exit.
 
