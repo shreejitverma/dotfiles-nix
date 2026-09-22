@@ -7,6 +7,10 @@ result-*
 files/.config/herdr/*.log
 files/.config/herdr/session.json
 files/.config/herdr/*.sock
+files/.config/herdr/.plugins.lock
+files/.config/herdr/release-notes.json
+files/.config/herdr/sessions/
+files/.config/herdr/*.bak-*
 
 # no-mistakes local validation state - never commit in this public repo
 .no-mistakes/
