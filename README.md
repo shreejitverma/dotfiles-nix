@@ -255,7 +255,7 @@ This section documents how it is wired on my system today, and then gives the ex
 | [treehouse](https://github.com/kunchenguid/treehouse) | Git worktrees without managing worktrees; one worktree per stream of work | `treehouse` |
 | [firstmate](https://github.com/kunchenguid/firstmate) | Talk to one agent, ship with a crew; agent-of-agents workspace and the default entry point for all AI work | `fm` shell function |
 | [gnhf](https://github.com/kunchenguid/gnhf) | "Good night, have fun": supervised overnight agent coding runs | `gnhf` |
-| [wheelhouse](https://github.com/kunchenguid/wheelhouse) | Cross-repo "what needs my decision" queue on GitHub Issues + Actions | runs on GitHub |
+| [wheelhouse](https://github.com/ImZoomBoy/wheelhouse) | Cross-repo "what needs my decision" queue on GitHub Issues + Actions | runs on GitHub |
 
 ### How it is integrated on this machine
 
@@ -268,6 +268,9 @@ Every tool is cloned from my fork with the parent repo as `upstream`:
 origin   -> https://github.com/shreejitverma/<repo>.git
 upstream -> https://github.com/kunchenguid/<repo>.git
 ```
+
+One parent is not under `kunchenguid`: `wheelhouse` tracks `ImZoomBoy/wheelhouse`, where the project lives since the original repository was removed.
+The fleet manifest records each repo's actual parent, and the fleet doctor checks every `upstream` remote against it.
 
 This is what makes local commits safe: the sync is fast-forward-only, so a fork with its own commits (like wheelhouse's `Configure fleet for shreejitverma`) is reported as diverged and left untouched rather than merged or clobbered.
 
@@ -424,12 +427,18 @@ cd ~/github
 me=$(gh api user -q .login)
 for repo in axi chrome-devtools-axi firstmate gh-axi gnhf lavish-axi \
             no-mistakes quota-axi tasks-axi treehouse wheelhouse; do
-  gh repo fork "kunchenguid/$repo" --clone=false
+  parent=kunchenguid
+  case "$repo" in
+    wheelhouse) parent=ImZoomBoy ;;
+  esac
+  gh repo fork "$parent/$repo" --clone=false
   git clone "https://github.com/$me/$repo.git"
-  git -C "$repo" remote add upstream "https://github.com/kunchenguid/$repo.git"
+  git -C "$repo" remote add upstream "https://github.com/$parent/$repo.git"
   git -C "$repo" fetch upstream
 done
 ```
+
+wheelhouse forks from `ImZoomBoy/wheelhouse` because the original `kunchenguid/wheelhouse` repository was removed.
 
 **Step 3: build the Go tools into `~/go/bin`.**
 
