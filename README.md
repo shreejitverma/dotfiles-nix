@@ -187,19 +187,12 @@ To apply a change without moving the pins, use `rebuild`.
 
 ## Testing
 
-```bash
-bash tests/mac_setup_test.sh        # setup/mac.sh, against stubs
-bash tests/install_dispatch_test.sh # platform detection and dispatch, against stubs
-bash tests/sync_forks_test.sh       # files/bin/sync-forks, sandboxed git fixtures
-bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
-```
-
 Do not run `setup/mac.sh`, `setup/linux.sh`, or `setup/install.sh` against a development or CI machine just to test them.
-The first three suites above run the real script logic against sandboxes (stub executables for the setup scripts, local git fixtures for the fork sync), so nothing is ever installed, activated, or pushed anywhere real, and they run anywhere.
-The last needs Docker and skips itself without it; it performs a genuine Nix build and Home Manager activation inside a container, then asserts on the environment that results.
+Every suite in `tests/` runs the real script logic against a sandbox instead (stub executables, sandboxed `HOME` directories, local git fixtures), so nothing is ever installed, activated, or pushed anywhere real.
+The one exception is `tests/linux_e2e_docker.sh`, which performs a genuine Nix build and Home Manager activation, but only inside a Docker container; it skips itself without Docker.
 
-Two gaps are deliberate and documented: the Determinate installer branch of `setup/linux.sh` is not exercised (the container image already ships Nix), and `setup/windows.ps1` is not covered at all, since it needs Windows and PowerShell.
-See [`tests/README.md`](tests/README.md) for the scenarios each suite covers and how the sandbox is guarded.
+Two gaps are deliberate: the Determinate installer branch of `setup/linux.sh` is not exercised (the container image already ships Nix), and `setup/windows.ps1` is not covered at all, since it needs Windows and PowerShell.
+[`tests/README.md`](tests/README.md) is the authoritative description of every suite, the scenarios it covers, how the sandbox is guarded, and what CI runs.
 
 ## Where to add new tools
 
