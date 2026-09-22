@@ -29,9 +29,11 @@
 #     been made a symlink, or when a linked manual is not listed in
 #     context.fileName, while never blaming context.fileName where no manual is
 #     linked at all
+#   - report the section 6 claude quota read as ok only for a real quota row
+#     with a numeric percentage, and warn on attention lines alone
 #
 # Other ic-doctor sections (checkout path, forks, host binaries) still run and
-# may FAIL; this suite only asserts section 7.
+# may FAIL; this suite only asserts sections 6 and 7.
 # Nothing touches the real home directory. Honours DEBUG_KEEP_SANDBOX=1.
 #
 # Run: bash tests/ic_doctor_test.sh

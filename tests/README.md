@@ -114,21 +114,15 @@ It covers:
 
 ## ic_doctor_test.sh
 
-It also covers the section 6 auth check, with `quota-axi` stubbed so no live provider is needed:
-
-- a quota row carrying a numeric percentage reads as a live claude quota read and reports `ok`
-- attention lines alone, whose third field is a word such as `stale` or `headroom_unknown`, do not satisfy the check and report `warn`
-- the same unreadable case never reports the read as `ok`
-
-That last pair is the regression this suite exists to hold: the check previously grepped for `,fresh,`, which only the `--full` output emits, so it warned on every healthy run.
-
-Runs the real `files/bin/ic-doctor` against fake `$HOME` directories and asserts only section 7, cut from the output at the `[7/7]` header.
+Runs the real `files/bin/ic-doctor` against fake `$HOME` directories and asserts only section 6 (auth, cut between the `[6/7]` and `[7/7]` headers) and section 7 (cut from the `[7/7]` header).
 The other sections still run against the fake `HOME` and the host, and may FAIL there; that is expected and not asserted.
-The only stub is a fake `grok` executable that prints a version line, planted at `~/.local/bin/grok` or `~/go/bin/grok` inside the fake `HOME`; both directories are on the PATH `ic-doctor` builds for itself (`ic_default_path`).
+There are two stubs, both planted inside the fake `HOME` on the PATH `ic-doctor` builds for itself (`ic_default_path`): a fake `grok` executable that prints a version line, at `~/.local/bin/grok` or `~/go/bin/grok`, and a fake `quota-axi` at `~/.local/bin/quota-axi` that prints either a readable quota row or attention lines only, so section 6 needs no live provider.
 That PATH also includes host directories outside the fake `HOME`, so a real `grok` installed somewhere like `/opt/homebrew/bin` on the host would show up as a second copy; the suite does not mask that.
 
 It covers:
 
+- a `quota-axi` quota row carrying a numeric percentage: the section 6 claude quota read reports `ok`
+- attention lines alone, whose third field is a word such as `stale` or `headroom_unknown`: `warn`, and never `ok`; this pair holds the regression where the check grepped for `,fresh,`, which only the `--full` output emits, so it warned on every healthy run
 - `~/AGENTS.md` linked to the tool-neutral `agents/AGENTS.md`: `ok`, with no FAIL on the cross-tool chain, and the `Default development system` routing section verified in that file rather than only in Claude's, since it is what Codex now loads; a neutral manual that has lost the section is a FAIL beside a still-`ok` `CLAUDE.md`
 - `~/AGENTS.md` resolving to Claude's manual while a neutral build exists: FAIL naming that specific fault, since one tool reading another tool's manual is what the per-tool build exists to remove
 - the agents repo cloned but its `AGENTS.md` never generated: FAIL naming `bin/build-manuals`, never an `ok` for the Claude fallback, which matches how a missing `GROK.md` or `GEMINI.md` source already FAILs

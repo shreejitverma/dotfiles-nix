@@ -59,7 +59,7 @@ bash tests/mac_setup_test.sh        # setup/mac.sh, stubbed
 bash tests/install_dispatch_test.sh # setup/install.sh detection and dispatch, stubbed
 bash tests/sync_forks_test.sh       # files/bin/sync-forks, sandboxed git fixtures
 bash tests/ic_link_test.sh          # files/bin/ic-link per-tool manual wiring, sandboxed HOME
-bash tests/ic_doctor_test.sh        # files/bin/ic-doctor cross-tool checks (section 7), sandboxed HOME
+bash tests/ic_doctor_test.sh        # files/bin/ic-doctor auth and cross-tool checks (sections 6 and 7), sandboxed HOME
 bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
 
