@@ -421,7 +421,12 @@ if [ -d "$GH_ROOT/agents" ]; then
     for f in "$GH_ROOT/agents/claude/$kind"/*.md; do
       [ -f "$f" ] || continue
       n=$((n + 1))
-      [ "$(readlink "$HOME/.claude/$kind/$(basename "$f")" 2>/dev/null)" = "$f" ] || unlinked="$unlinked $(basename "$f")"
+      dest="$HOME/.claude/$kind/$(basename "$f")"
+      if [ -e "$dest" ] && [ ! -L "$dest" ]; then
+        bad "claude: ~/.claude/$kind/$(basename "$f") is a real file, not a link (merge it into ~/github/agents/claude/$kind/$(basename "$f"), remove it, then run ic-link)"
+      elif [ "$(readlink "$dest" 2>/dev/null)" != "$f" ]; then
+        unlinked="$unlinked $(basename "$f")"
+      fi
     done
     stale=""
     for f in "$HOME/.claude/$kind"/*; do
@@ -456,7 +461,7 @@ if [ -d "$GH_ROOT/agents" ]; then
     if manuals_out=$("$GH_ROOT/agents/bin/build-manuals" --check 2>&1); then
       ok "agents manuals match their sources"
     else
-      bad "agents manuals are stale or hand-edited: $(printf '%s' "$manuals_out" | head -1) (run: ~/github/agents/bin/build-manuals)"
+      bad "agents manuals are stale or hand-edited: $(printf '%s\n' "$manuals_out" | grep -m1 'is stale or hand-edited' || printf '%s\n' "$manuals_out" | tail -1) (run: ~/github/agents/bin/build-manuals)"
     fi
   fi
   if [ -n "$(git -C "$GH_ROOT/agents" status --porcelain 2>/dev/null | head -1)" ]; then

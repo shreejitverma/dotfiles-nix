@@ -621,6 +621,17 @@ section=$(run_section7 "$home")
 assert_grep "$section" 'FAIL  claude: rules not linked into ~/.claude/rules: cpp.md \(run: ic-link\)' \
   "fails naming each versioned rule that is not linked"
 
+home=$(new_home claude-layer-real-file)
+plant_wiring "$home"
+plant_claude_layer "$home"
+rm -f "$home/.claude/rules/cpp.md"
+printf '%s\n' '# hand-written' >"$home/.claude/rules/cpp.md"
+section=$(run_section7 "$home")
+assert_grep "$section" 'FAIL  claude: ~/.claude/rules/cpp.md is a real file, not a link \(merge it into ~/github/agents/claude/rules/cpp.md, remove it, then run ic-link\)' \
+  "fails naming the merge-and-remove remedy for a hand-written rule file"
+assert_not_grep "$section" 'rules not linked' \
+  "does not tell ic-link to fix a real file it deliberately leaves alone"
+
 home=$(new_home claude-layer-dangling)
 plant_wiring "$home"
 plant_claude_layer "$home"
@@ -643,11 +654,13 @@ assert_grep "$section" 'FAIL  claude: settings.json runs claude/hooks/guard.py, 
 home=$(new_home manuals-stale)
 plant_wiring "$home"
 mkdir -p "$home/github/agents/bin"
-printf '%s\n' '#!/bin/bash' 'echo "build-manuals: CLAUDE.md is stale or hand-edited (run: bin/build-manuals)" >&2' 'exit 1' >"$home/github/agents/bin/build-manuals"
+printf '%s\n' '#!/bin/bash' 'echo "build-manuals: warning: GEMINI.md is 99999 chars, over the 40000 ceiling for gemini" >&2' 'echo "build-manuals: CLAUDE.md is stale or hand-edited (run: bin/build-manuals)" >&2' 'exit 1' >"$home/github/agents/bin/build-manuals"
 chmod +x "$home/github/agents/bin/build-manuals"
 section=$(run_section7 "$home")
 assert_grep "$section" 'FAIL  agents manuals are stale or hand-edited: build-manuals: CLAUDE.md is stale' \
   "fails, quoting build-manuals, when a generated manual is stale"
+assert_not_grep "$section" 'FAIL  agents manuals are stale or hand-edited: build-manuals: warning' \
+  "quotes the stale-manual line rather than an earlier size-ceiling warning"
 
 home=$(new_home manuals-current)
 plant_wiring "$home"
