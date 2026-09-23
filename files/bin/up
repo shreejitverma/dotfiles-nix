@@ -40,8 +40,11 @@ nix flake update --flake "$FLAKE"
 # letting `set -e` abort with nothing said.
 case "$TARGET" in
   darwin)
-    bold "==> darwin-rebuild switch"
-    /run/current-system/sw/bin/darwin-rebuild switch --flake "${FLAKE}#mac"
+    # Only the activation runs as root: nix-darwin refuses `switch` otherwise,
+    # while the flake update above and the Homebrew, rustup, and tldr steps
+    # below must keep running as this user so they never leave root-owned files.
+    bold "==> sudo darwin-rebuild switch"
+    sudo /run/current-system/sw/bin/darwin-rebuild switch --flake "${FLAKE}#mac"
     ;;
   linux|wsl)
     if ! PROFILE=$(ic_profile_for "$TARGET" "$(ic_detect_arch)" "$FLAKE"); then

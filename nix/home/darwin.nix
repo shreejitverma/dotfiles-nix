@@ -21,8 +21,12 @@ in
   # `mac`; it matches nothing and the alias dies with "no matches found" before
   # darwin-rebuild is ever reached. Alias expansion is textual, so the quotes
   # have to survive into the expanded command line.
+  #
+  # sudo because nix-darwin now refuses `switch` from a non-root user ("system
+  # activation must now be run as root"); darwin-rebuild still activates Home
+  # Manager as this user. setup/mac.sh already runs it the same way.
   programs.zsh.shellAliases.rebuild =
-    "/run/current-system/sw/bin/darwin-rebuild switch --flake '${dotfilesDir}#mac'";
+    "sudo /run/current-system/sw/bin/darwin-rebuild switch --flake '${dotfilesDir}#mac'";
 
   # C++ lint tools on PATH without the compiler. Homebrew's llvm is keg-only
   # (declared in host.nix), so clang-tidy, clang-format, and run-clang-tidy are
