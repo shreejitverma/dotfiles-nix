@@ -4,7 +4,8 @@
 # Verifies the integration layers documented in the README:
 #   1. this repo's checkout path vs the dotfilesDir this platform's entry module declares
 #   2. forks under ~/github (clone, upstream remote, branch, cleanliness)
-#   3. binaries on PATH with working --version
+#   3. binaries on PATH with working --version, plus on macOS the C++ lint
+#      tools linked from Homebrew llvm (warn only)
 #   4. agent skill symlinks (~/.agents/skills and ~/.claude/skills), including
 #      every skill under files/skills in this checkout
 #   5. the daily sync-forks schedule (launchd agent on macOS, systemd user
@@ -13,7 +14,7 @@
 #   7. cross-tool defaults (~/AGENTS.md chain, codex AGENTS.md and skills,
 #      grok AGENTS.md / agent definitions / skills / binary,
 #      gemini AGENTS.md and its context.fileName setting), plus the personal
-#      layer: Claude subagents and rules links, the guard hook script that
+#      layer: Claude subagents and rules links, every hook script that
 #      claude/settings.json runs, and whether the generated manuals are current
 #
 # Read-only: it never mutates anything. Exits non-zero if any check FAILs;

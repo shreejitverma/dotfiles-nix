@@ -32,11 +32,14 @@
 #   - report the section 6 claude quota read as ok only for a real quota row
 #     with a numeric percentage, and warn on attention lines alone
 #   - check Claude subagent and rule links from ~/github/agents, including
-#     dangling ones, the guard hook script settings.json runs, and whether
+#     dangling ones, every hook script settings.json runs, and whether
 #     build-manuals --check reports the generated manuals current
+#   - on macOS, accept the linked C++ lint tools and only warn, naming each,
+#     when one is missing or dangling; off macOS, skip that check
 #
 # Other ic-doctor sections (checkout path, forks, host binaries) still run and
-# may FAIL; this suite only asserts sections 6 and 7.
+# may FAIL; this suite only asserts the C++ lint-tool lines of section 3 and
+# sections 6 and 7.
 # Nothing touches the real home directory. Honours DEBUG_KEEP_SANDBOX=1.
 #
 # Run: bash tests/ic_doctor_test.sh
