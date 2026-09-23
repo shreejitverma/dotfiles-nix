@@ -83,15 +83,33 @@ alias nvc='cd ~/.config/nvim'
 # Listing (eza). Falls back gracefully if eza is not yet installed.
 # -----------------------------------------------------------------------------
 if command -v eza >/dev/null; then
-  alias ls='eza --group-directories-first --icons=auto'
-  alias l='eza -lbF --group-directories-first --icons=auto'
-  alias ll='eza -lbGF --git --group-directories-first --icons=auto'
-  alias la='eza -labGF --git --group-directories-first --icons=auto'
-  alias lA='eza -labhHigUmuSa --time-style=long-iso --git --color-scale --group-directories-first --icons=auto'
-  alias lt='eza --tree --level=2 --group-directories-first --icons=auto'
-  alias ltt='eza --tree --level=3 --group-directories-first --icons=auto'
-  alias lr='eza -lbF --group-directories-first --icons=auto --sort=modified'
-  alias ld='eza -lbDF --group-directories-first --icons=auto'   # directories only
+  # eza reads file names from stdin whenever stdin is not a terminal and no path
+  # is given, so a bare listing under an agent, a pipe, or a script printed
+  # nothing or blocked on an open stdin. An explicit path makes eza ignore stdin,
+  # so every listing below passes `.` when called without one, and `ls` itself
+  # defers to the system ls off a terminal, where plain output is what callers
+  # parse anyway.
+  _ic_eza() {
+    local arg
+    for arg in "$@"; do
+      [[ $arg == -* ]] || { command eza "$@"; return; }
+    done
+    command eza "$@" .
+  }
+  unalias ls l ll la lA lt ltt lr ld 2>/dev/null
+  function ls {
+    if [[ -t 0 ]]; then _ic_eza --group-directories-first --icons=auto "$@"
+    else command ls "$@"
+    fi
+  }
+  alias l='_ic_eza -lbF --group-directories-first --icons=auto'
+  alias ll='_ic_eza -lbGF --git --group-directories-first --icons=auto'
+  alias la='_ic_eza -labGF --git --group-directories-first --icons=auto'
+  alias lA='_ic_eza -labhHigUmuSa --time-style=long-iso --git --color-scale --group-directories-first --icons=auto'
+  alias lt='_ic_eza --tree --level=2 --group-directories-first --icons=auto'
+  alias ltt='_ic_eza --tree --level=3 --group-directories-first --icons=auto'
+  alias lr='_ic_eza -lbF --group-directories-first --icons=auto --sort=modified'
+  alias ld='_ic_eza -lbDF --group-directories-first --icons=auto'   # directories only
 else
   alias ll='ls -lhF'
   alias la='ls -lahF'

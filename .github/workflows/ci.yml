@@ -55,6 +55,9 @@ jobs:
       - name: ic-doctor health checks
         run: bash tests/ic_doctor_test.sh
 
+      - name: zsh listing commands off a terminal
+        run: bash tests/ic_workflow_listing_test.sh
+
       - name: install dispatch and platform detection
         run: bash tests/install_dispatch_test.sh
 

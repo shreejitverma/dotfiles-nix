@@ -6,13 +6,14 @@ bash tests/install_dispatch_test.sh # setup/install.sh detection and dispatch, s
 bash tests/sync_forks_test.sh       # files/bin/sync-forks, sandboxed git fixtures
 bash tests/ic_link_test.sh          # files/bin/ic-link per-tool manual wiring, sandboxed HOME
 bash tests/ic_doctor_test.sh        # files/bin/ic-doctor auth and cross-tool checks (sections 6 and 7), sandboxed HOME
+bash tests/ic_workflow_listing_test.sh # files/zsh/ic-workflow.zsh listing commands off a terminal, stub eza
 bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
 
 All but the last never install anything and run anywhere.
 `.github/workflows/ci.yml` runs every suite except `linux_e2e_docker.sh` on macOS for each pull request and each push to `main`, alongside shellcheck at warning level over every bash script in the repo.
 `linux_e2e_docker.sh` needs Docker and skips itself when Docker is unavailable.
-All six honour `DEBUG_KEEP_SANDBOX=1`, which leaves the scratch directory each one works in (per scenario, for `mac_setup_test.sh`) on disk for inspection after a failing run instead of removing it on exit.
+All seven honour `DEBUG_KEEP_SANDBOX=1`, which leaves the scratch directory each one works in (per scenario, for `mac_setup_test.sh`) on disk for inspection after a failing run instead of removing it on exit.
 
 `mac_setup_test.sh` is a regression test for `setup/mac.sh`.
 It never runs the script against the real machine, since that script installs Nix and activates a real `nix-darwin` system.
@@ -155,3 +156,16 @@ It covers:
 - Claude subagents and rules linked from the agents repo: `ok` per kind with the count; a versioned rule that is not linked is a FAIL naming it, a hand-written real file in its place is its own FAIL naming the merge, remove, and `ic-link` remedy rather than the bare `ic-link` one that would never fix it, with no `ok` line for that kind beside it, and a `~/.claude/agents` link left dangling by a removed source is a FAIL naming the link and the `rm` that clears it, while a dangling link that never pointed into the agents repo is ignored
 - `claude/settings.json` running `claude/hooks/guard.py`: `ok` when the script exists and `python3` is on `PATH`, FAIL when the script is missing, since every Bash and edit call would then hit a hook error
 - a stub `bin/build-manuals` in the agents repo that exits non-zero with a size-ceiling warning followed by its real stale-manual message: FAIL quoting the stale-manual line, not the first line; exiting zero: `ok`
+
+## ic_workflow_listing_test.sh
+
+Sources the real `files/zsh/ic-workflow.zsh` into a non-interactive `zsh -f` with stdin redirected, which is how agents, pipes, and scripts run it.
+`eza` is replaced by a stub on `PATH` that reproduces the rule behind the original fault: with no path argument and a non-terminal stdin, it reads file names from stdin instead of listing the directory.
+Each run starts with an `ls=eza` alias already defined, the state Home Manager's eza integration used to leave, so the suite also proves the workflow layer replaces it.
+
+It covers:
+
+- `ls` resolving to the workflow function, and a bare `ls` off a terminal listing the directory through the system `ls`
+- bare `ll` and `lt` handing eza an explicit `.`, and an explicit path passing through without an extra one
+- `ll` with an open, silent FIFO on stdin returning immediately instead of blocking, timed on the command alone so the FIFO's writer cannot mask a hang
+
