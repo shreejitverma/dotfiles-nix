@@ -86,13 +86,34 @@ if command -v eza >/dev/null; then
   # eza reads file names from stdin whenever stdin is not a terminal and no path
   # is given, so a bare listing under an agent, a pipe, or a script printed
   # nothing or blocked on an open stdin. An explicit path makes eza ignore stdin,
-  # so every listing below passes `.` when called without one, and `ls` itself
-  # defers to the system ls off a terminal, where plain output is what callers
-  # parse anyway.
+  # so every listing below passes `.` off a terminal when called without one,
+  # and `ls` itself defers to the system ls there, where plain output is what
+  # callers parse anyway. Deciding whether a path was given means skipping
+  # option values; the option table mirrors `eza --help` for eza 0.23.
   _ic_eza() {
-    local arg
-    for arg in "$@"; do
-      [[ $arg == -* ]] || { command eza "$@"; return; }
+    [[ -t 0 ]] && { command eza "$@"; return; }
+    local -i i=1
+    local arg cluster
+    while (( i <= $# )); do
+      arg=${@[i]}
+      case $arg in
+        --) (( i < $# )) && { command eza "$@"; return; }; break ;;
+        --level|--width|--ignore-glob|--sort|--time|--time-style|--color-scale-mode) (( i++ )) ;;
+        --classify|--color|--colour|--icons|--hyperlink|--color-scale)
+          [[ ${@[i+1]} == (always|auto|never|all|age|size) ]] && (( i++ )) ;;
+        --*) ;;
+        -?*)
+          cluster=${arg#-}
+          while [[ -n $cluster ]]; do
+            if [[ $cluster[1] == [LwIst] ]]; then
+              (( ${#cluster} == 1 )) && (( i++ ))
+              break
+            fi
+            cluster=${cluster[2,-1]}
+          done ;;
+        *) command eza "$@"; return ;;
+      esac
+      (( i++ ))
     done
     command eza "$@" .
   }

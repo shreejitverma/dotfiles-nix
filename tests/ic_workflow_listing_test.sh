@@ -44,14 +44,33 @@ if ! command -v zsh >/dev/null 2>&1; then
   exit 0
 fi
 
-# Stub eza: list the non-option arguments when there are any; otherwise read
-# file names from stdin, which is what the real eza does off a terminal.
+# Stub eza: list the path arguments when there are any; otherwise read file
+# names from stdin, which is what the real eza does off a terminal. Option
+# values are not paths, so the stub skips them using the eza 0.23 option table.
 mkdir -p "$SANDBOX/bin" "$SANDBOX/dir"
 cat >"$SANDBOX/bin/eza" <<'EOF'
 #!/bin/bash
 paths=()
-for a in "$@"; do
-  case "$a" in -*) ;; *) paths+=("$a") ;; esac
+while [ $# -gt 0 ]; do
+  a=$1
+  shift
+  case "$a" in
+    --) paths+=("$@"); break ;;
+    --level|--width|--ignore-glob|--sort|--time|--time-style|--color-scale-mode) shift ;;
+    --classify|--color|--colour|--icons|--hyperlink|--color-scale)
+      case "${1-}" in always|auto|never|all|age|size) shift ;; esac ;;
+    --*) ;;
+    -?*)
+      c=${a#-}
+      while [ -n "$c" ]; do
+        case "$c" in
+          [LwIst]) shift; break ;;
+          [LwIst]*) break ;;
+        esac
+        c=${c#?}
+      done ;;
+    *) paths+=("$a") ;;
+  esac
 done
 if [ "${#paths[@]}" -gt 0 ]; then
   printf 'EZA %s\n' "${paths[*]}"
@@ -89,6 +108,15 @@ assert_eq "$out" "EZA ." "bare lt hands eza an explicit '.'"
 
 out=$(run_zsh 'll alpha' </dev/null)
 assert_eq "$out" "EZA alpha" "an explicit path is passed through without an extra '.'"
+
+# Option values are not paths: each of these must still get the default '.'.
+for cmd in 'lt -L 3' 'lt -L3' 'lt --level 4' 'll --sort size' 'll -s modified' "ll -I '*.o'" 'll --color always'; do
+  out=$(run_zsh "$cmd" </dev/null)
+  assert_eq "$out" "EZA ." "'$cmd' hands eza an explicit '.' despite the option value"
+done
+
+out=$(run_zsh 'll -- -file' </dev/null)
+assert_eq "$out" "EZA -file" "a path after '--' is passed through without an extra '.'"
 
 # An open stdin that never delivers data or EOF: a FIFO held open by a writer
 # that just sleeps. Timing only run_zsh, not the writer, is what shows a hang.

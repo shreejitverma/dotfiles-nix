@@ -167,5 +167,7 @@ It covers:
 
 - `ls` resolving to the workflow function, and a bare `ls` off a terminal listing the directory through the system `ls`
 - bare `ll` and `lt` handing eza an explicit `.`, and an explicit path passing through without an extra one
+- option values given as a separate argument or inside a short-option cluster (`lt -L 3`, `lt -L3`, `ll --sort size`, `ll -s modified`, `ll -I '*.o'`, `ll --color always`) not counting as paths, so eza still gets `.`; the stub skips values using the same eza 0.23 option table as `_ic_eza`
+- a dash-prefixed path after `--` (`ll -- -file`) passing through without an extra `.`
 - `ll` with an open, silent FIFO on stdin returning immediately instead of blocking, timed on the command alone so the FIFO's writer cannot mask a hang
 
