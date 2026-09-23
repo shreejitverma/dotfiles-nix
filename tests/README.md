@@ -5,7 +5,7 @@ bash tests/mac_setup_test.sh        # setup/mac.sh, stubbed
 bash tests/install_dispatch_test.sh # setup/install.sh detection and dispatch, stubbed
 bash tests/sync_forks_test.sh       # files/bin/sync-forks, sandboxed git fixtures
 bash tests/ic_link_test.sh          # files/bin/ic-link per-tool manual wiring, sandboxed HOME
-bash tests/ic_doctor_test.sh        # files/bin/ic-doctor auth and cross-tool checks (sections 6 and 7), sandboxed HOME
+bash tests/ic_doctor_test.sh        # files/bin/ic-doctor lint-tool, auth, and cross-tool checks (sections 3, 6, and 7), sandboxed HOME
 bash tests/ic_workflow_listing_test.sh # files/zsh/ic-workflow.zsh listing commands off a terminal, stub eza
 bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
@@ -119,7 +119,7 @@ It covers:
 
 ## ic_doctor_test.sh
 
-Runs the real `files/bin/ic-doctor` against fake `$HOME` directories and asserts only section 6 (auth, cut between the `[6/7]` and `[7/7]` headers) and section 7 (cut from the `[7/7]` header).
+Runs the real `files/bin/ic-doctor` against fake `$HOME` directories and asserts only the C++ lint-tool lines of section 3 (cut between the `[3/7]` and `[4/7]` headers, macOS only), section 6 (auth, cut between the `[6/7]` and `[7/7]` headers), and section 7 (cut from the `[7/7]` header).
 The other sections still run against the fake `HOME` and the host, and may FAIL there; that is expected and not asserted.
 There are two stubs, both planted inside the fake `HOME` on the PATH `ic-doctor` builds for itself (`ic_default_path`): a fake `grok` executable that prints a version line, at `~/.local/bin/grok` or `~/go/bin/grok`, and a fake `quota-axi` at `~/.local/bin/quota-axi` that prints either a readable quota row or attention lines only, so section 6 needs no live provider.
 That PATH also includes host directories outside the fake `HOME`, so a real `grok` installed somewhere like `/opt/homebrew/bin` on the host would show up as a second copy; the suite does not mask that.
@@ -154,7 +154,8 @@ It covers:
 - Gemini installed with `~/github/agents` not cloned, both with a settings file that has no `AGENTS.md` entry and with no settings file at all (the two states a fresh Gemini install is actually in): exactly one Gemini warning and no Gemini FAIL, since `ic-link` deliberately links nothing there and a check about the linked manual never loading would contradict the warning above it; the same holds for a cloned repo with no `GEMINI.md`, which yields only the missing-source FAIL naming `bin/build-manuals`, since that manual is generated and must not be hand-written
 - a hand-made `~/.gemini/AGENTS.md` pointing at the manual an uncloned repo would provide: a warning naming that dangling target, and exactly one Gemini line. The repo-absent warning is always emitted, so Gemini can never be the one tool that says nothing at all about a broken manual link; it reports what was not checked rather than asserting a link state, so it does not contradict a mislink FAIL above it
 - Claude subagents and rules linked from the agents repo: `ok` per kind with the count; a versioned rule that is not linked is a FAIL naming it, a hand-written real file in its place is its own FAIL naming the merge, remove, and `ic-link` remedy rather than the bare `ic-link` one that would never fix it, with no `ok` line for that kind beside it, and a `~/.claude/agents` link left dangling by a removed source is a FAIL naming the link and the `rm` that clears it, while a dangling link that never pointed into the agents repo is ignored
-- `claude/settings.json` running `claude/hooks/guard.py`: `ok` when the script exists and `python3` is on `PATH`, FAIL when the script is missing, since every Bash and edit call would then hit a hook error
+- `claude/settings.json` running hook scripts: `ok` naming every script when all exist and `python3` is on `PATH`; a FAIL per missing script, whether it is the guard or `post_edit.py`, with no `ok` beside it, since each hook command skips a missing script and the session would silently run without it
+- on macOS, the C++ lint tools in `~/.local/share/ic/llvm-tools`: `ok` when all three links resolve; one warning (never a FAIL) naming each missing or dangling tool and the `brew install llvm` then `rebuild` remedy. Off macOS the check is absent, since nothing links those tools there
 - a stub `bin/build-manuals` in the agents repo that exits non-zero with a size-ceiling warning followed by its real stale-manual message: FAIL quoting the stale-manual line, not the first line; exiting zero: `ok`
 
 ## ic_workflow_listing_test.sh

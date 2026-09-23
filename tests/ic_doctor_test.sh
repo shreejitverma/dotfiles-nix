@@ -569,6 +569,36 @@ run_section6() {
   awk '/\[6\/7\]/,/\[7\/7\]/' "$log"
 }
 
+# --- C++ lint tools (macOS only) ---
+run_section3() {
+  local log
+  log="$SANDBOX/$(basename "$1").s3.log"
+  env -u NVM_DIR HOME="$1" "$REPO_ROOT/files/bin/ic-doctor" >"$log" 2>&1 || true
+  awk '/\[3\/7\]/,/\[4\/7\]/' "$log"
+}
+home=$(new_home llvm-tools)
+if [ "$(uname -s)" = Darwin ]; then
+  mkdir -p "$home/.local/share/ic/llvm-tools" "$home/keg"
+  for t in clang-format clang-tidy run-clang-tidy; do
+    printf '#!/bin/sh\nexit 0\n' >"$home/keg/$t"
+    chmod +x "$home/keg/$t"
+    ln -s "$home/keg/$t" "$home/.local/share/ic/llvm-tools/$t"
+  done
+  section=$(run_section3 "$home")
+  assert_grep "$section" 'ok    C\+\+ lint tools linked' \
+    "accepts the C++ lint tools when all three links resolve"
+  rm "$home/keg/clang-tidy" "$home/.local/share/ic/llvm-tools/run-clang-tidy"
+  section=$(run_section3 "$home")
+  assert_grep "$section" 'warn  C\+\+ lint tools missing or dangling in ~/.local/share/ic/llvm-tools: clang-tidy run-clang-tidy \(run: brew install llvm, then rebuild\)' \
+    "warns naming a dangling link and a missing one, with the fix"
+  assert_not_grep "$section" 'FAIL  C\+\+' \
+    "never FAILs over the optional C++ lint tools"
+else
+  section=$(run_section3 "$home")
+  assert_not_grep "$section" 'C\+\+ lint tools' \
+    "skips the C++ lint tools check off macOS, where nothing links them"
+fi
+
 # --- quota-axi readable: the check must pass ---
 home=$(new_home quota-readable)
 plant_quota_axi "$home/.local/bin/quota-axi" readable
@@ -587,7 +617,7 @@ assert_grep "$section" 'warn  quota-axi cannot read claude quota' \
 assert_not_grep "$section" 'ok    quota-axi reads live claude quota' \
   "an unreadable provider never reports the quota read as ok"
 
-# --- Claude subagents, rules, guard hook, and manual drift (personal layer) ---
+# --- Claude subagents, rules, hook scripts, and manual drift (personal layer) ---
 plant_claude_layer() {
   local home="$1"
   local repo="$home/github/agents"
@@ -608,7 +638,7 @@ assert_grep "$section" 'ok    claude: 1 agents linked from ~/github/agents/claud
   "accepts Claude subagents linked from the agents repo"
 assert_grep "$section" 'ok    claude: 1 rules linked from ~/github/agents/claude/rules' \
   "accepts Claude rules linked from the agents repo"
-assert_grep "$section" 'ok    claude: guard hook present and python3 available' \
+assert_grep "$section" 'ok    claude: hook scripts present and python3 available \(guard.py\)' \
   "accepts the guard hook when settings.json runs it and the script exists"
 assert_not_grep "$section" 'FAIL  claude' \
   "does not FAIL the healthy Claude layer"
@@ -652,6 +682,22 @@ rm -f "$home/github/agents/claude/hooks/guard.py"
 section=$(run_section7 "$home")
 assert_grep "$section" 'FAIL  claude: settings.json runs claude/hooks/guard.py, which is missing' \
   "fails when settings.json runs a guard hook script that does not exist"
+
+home=$(new_home claude-post-edit-missing)
+plant_wiring "$home"
+plant_claude_layer "$home"
+printf '%s\n' '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"python3 \"$HOME/github/agents/claude/hooks/guard.py\" bash"}]}],"PostToolUse":[{"matcher":"Edit","hooks":[{"type":"command","command":"python3 \"$HOME/github/agents/claude/hooks/post_edit.py\""}]}]}}' >"$home/github/agents/claude/settings.json"
+section=$(run_section7 "$home")
+assert_grep "$section" 'FAIL  claude: settings.json runs claude/hooks/post_edit.py, which is missing' \
+  "fails naming every hook script settings.json runs that does not exist, not just the guard"
+assert_not_grep "$section" 'guard.py, which is missing' \
+  "does not blame a hook script that is present"
+assert_not_grep "$section" 'ok    claude: hook scripts present' \
+  "does not report the hooks healthy beside a missing one"
+printf '%s\n' '# post_edit' >"$home/github/agents/claude/hooks/post_edit.py"
+section=$(run_section7 "$home")
+assert_grep "$section" 'ok    claude: hook scripts present and python3 available \(guard.py post_edit.py\)' \
+  "names every hook script once all are present"
 
 home=$(new_home manuals-stale)
 plant_wiring "$home"
