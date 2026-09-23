@@ -83,15 +83,54 @@ alias nvc='cd ~/.config/nvim'
 # Listing (eza). Falls back gracefully if eza is not yet installed.
 # -----------------------------------------------------------------------------
 if command -v eza >/dev/null; then
-  alias ls='eza --group-directories-first --icons=auto'
-  alias l='eza -lbF --group-directories-first --icons=auto'
-  alias ll='eza -lbGF --git --group-directories-first --icons=auto'
-  alias la='eza -labGF --git --group-directories-first --icons=auto'
-  alias lA='eza -labhHigUmuSa --time-style=long-iso --git --color-scale --group-directories-first --icons=auto'
-  alias lt='eza --tree --level=2 --group-directories-first --icons=auto'
-  alias ltt='eza --tree --level=3 --group-directories-first --icons=auto'
-  alias lr='eza -lbF --group-directories-first --icons=auto --sort=modified'
-  alias ld='eza -lbDF --group-directories-first --icons=auto'   # directories only
+  # eza reads file names from stdin whenever stdin is not a terminal and no path
+  # is given, so a bare listing under an agent, a pipe, or a script printed
+  # nothing or blocked on an open stdin. An explicit path makes eza ignore stdin,
+  # so every listing below passes `.` off a terminal when called without one,
+  # and `ls` itself defers to the system ls there, where plain output is what
+  # callers parse anyway. Deciding whether a path was given means skipping
+  # option values; the option table mirrors `eza --help` for eza 0.23.
+  _ic_eza() {
+    [[ -t 0 ]] && { command eza "$@"; return; }
+    local -i i=1
+    local arg cluster
+    while (( i <= $# )); do
+      arg=${@[i]}
+      case $arg in
+        --) (( i < $# )) && { command eza "$@"; return; }; break ;;
+        --level|--width|--ignore-glob|--sort|--time|--time-style|--color-scale-mode) (( i++ )) ;;
+        --classify|--color|--colour|--icons|--hyperlink|--color-scale)
+          [[ ${@[i+1]} == (always|auto|never|all|age|size) ]] && (( i++ )) ;;
+        --*) ;;
+        -?*)
+          cluster=${arg#-}
+          while [[ -n $cluster ]]; do
+            if [[ $cluster[1] == [LwIst] ]]; then
+              (( ${#cluster} == 1 )) && (( i++ ))
+              break
+            fi
+            cluster=${cluster[2,-1]}
+          done ;;
+        *) command eza "$@"; return ;;
+      esac
+      (( i++ ))
+    done
+    command eza "$@" .
+  }
+  unalias ls l ll la lA lt ltt lr ld 2>/dev/null
+  function ls {
+    if [[ -t 0 ]]; then _ic_eza --group-directories-first --icons=auto "$@"
+    else command ls "$@"
+    fi
+  }
+  alias l='_ic_eza -lbF --group-directories-first --icons=auto'
+  alias ll='_ic_eza -lbGF --git --group-directories-first --icons=auto'
+  alias la='_ic_eza -labGF --git --group-directories-first --icons=auto'
+  alias lA='_ic_eza -labhHigUmuSa --time-style=long-iso --git --color-scale --group-directories-first --icons=auto'
+  alias lt='_ic_eza --tree --level=2 --group-directories-first --icons=auto'
+  alias ltt='_ic_eza --tree --level=3 --group-directories-first --icons=auto'
+  alias lr='_ic_eza -lbF --group-directories-first --icons=auto --sort=modified'
+  alias ld='_ic_eza -lbDF --group-directories-first --icons=auto'   # directories only
 else
   alias ll='ls -lhF'
   alias la='ls -lahF'

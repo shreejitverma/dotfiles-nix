@@ -165,7 +165,16 @@ in
   };
 
   # Modern CLI tools with first-class zsh integration, wired reproducibly.
-  programs.eza.enable = true;
+  # eza's shell integration is off on purpose: it adds bare `ls=eza`, `ll`, `la`,
+  # and `lt` aliases at Home Manager's alias order (1100), which silently shadow
+  # the listing definitions in files/zsh/ic-workflow.zsh (order 1050), and a bare
+  # `eza` off a terminal reads file names from stdin, so agents and scripts got an
+  # empty listing or a hang. ic-workflow.zsh owns the listing commands instead.
+  programs.eza = {
+    enable = true;
+    enableZshIntegration = false;
+    enableBashIntegration = false;
+  };
 
   programs.bat = {
     enable = true;

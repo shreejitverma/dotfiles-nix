@@ -19,6 +19,7 @@ This file is the project's committed home for project-intrinsic agent knowledge:
 - `setup/lib/platform.sh` derives the Home Manager profile names from the `username` literal in `flake.nix` rather than restating them, and `ic_profile_for` returns non-zero for an architecture the flake has no output for. Both failures must stay ahead of the Nix install in `setup/install.sh`, `setup/linux.sh`, and `files/bin/up`; otherwise they resurface as an opaque missing-attribute or system-mismatch error from `nix build`, on a host that already has Nix on it. `IC_FLAKE_USER` is an override for an unreadable `flake.nix`, not the primary source.
 - `programs.bash.enable` belongs in `nix/home/linux.nix`, never in `nix/home/common.nix`. Linux and WSL log in with bash, so without it the session PATH, environment, and aliases exist only in the generated `.zshrc`. `common.nix` is shared with macOS, which already logs in with zsh, and enabling bash there would generate a `.bashrc`/`.profile` that nothing on that machine reads. The bash alias set is `config.programs.zsh.shellAliases` rather than a second copy, so the two cannot drift and the platform-specific `rebuild` alias is inherited; `files/zsh/ic-workflow.zsh` is zsh-only and is deliberately not sourced from bash.
 - `setup/lib/platform.sh` is the single source of truth for platform detection, the literal parsers, log locations, notifications, and the minimal PATH. `setup/install.sh`, `setup/mac.sh`, `setup/linux.sh`, `files/bin/up`, `files/bin/ic-doctor`, `files/bin/ic-link`, and `files/zsh/ic-workflow.zsh` all source it. Do not reintroduce a second copy of that logic in any of them. `ic-workflow.zsh` is sourced by every interactive shell, so it settles macOS from `$OSTYPE` and only sources `platform.sh` elsewhere; resolve the platform once at the top of that file rather than per alias.
+- `programs.eza` in `nix/home/common.nix` keeps its shell integration off. That integration adds bare `ls=eza`, `ll`, `la`, and `lt` aliases at Home Manager's alias order, which shadow the listing commands in `files/zsh/ic-workflow.zsh`, and a bare `eza` off a terminal reads file names from stdin, so agents and scripts got an empty listing or a hang. The workflow layer owns those commands, and `tests/ic_workflow_listing_test.sh` covers them.
 - `files/bin/ic-link` deliberately does not link `~/.grok/config.toml`, and `files/bin/ic-doctor` deliberately does not check it. Grok rewrites that file in place, which replaces a symlink with a regular file: a link there made `ic-doctor` FAIL after any Grok run, and rerunning `ic-link` silently discarded what Grok had written. Do not reintroduce the link or the check, and never let `ic-link` create, overwrite, or delete that file.
 - `files/bin/ic-link` never links, replaces, or deletes `~/.gemini/GEMINI.md`. That file is Gemini's own memory, written by `/memory add`, so the manual is linked at `~/.gemini/AGENTS.md` instead and `ic-doctor` FAILs if the memory file is ever turned into a symlink. Covered by the `gemini-present` scenario in `tests/ic_link_test.sh` and `gemini-memory-symlinked` in `tests/ic_doctor_test.sh`.
 - Skills owned by this repo are discovered, not listed: `setup/lib/skills.sh` returns every `files/skills/<name>/SKILL.md` in the invoking checkout, and `ic-link`, `ic-doctor`, and both test suites all read that one helper, so a new skill needs no list edit and the suites cannot drift from the scripts. Skill links go through `link_skill` in `ic-link`, which refuses a real directory: `ln -sfn` onto a real directory silently creates the link inside it, and `~/.agents/skills` holds real directories from `npx skills`. Do not reintroduce a bare `ln -sfn` for skill links.
@@ -53,7 +54,7 @@ Earlier sync PRs were squash-merged for exactly this reason; the ancestry was re
 
 ## Testing
 
-Six suites:
+Seven suites:
 
 ```bash
 bash tests/mac_setup_test.sh        # setup/mac.sh, stubbed
@@ -61,6 +62,7 @@ bash tests/install_dispatch_test.sh # setup/install.sh detection and dispatch, s
 bash tests/sync_forks_test.sh       # files/bin/sync-forks, sandboxed git fixtures
 bash tests/ic_link_test.sh          # files/bin/ic-link per-tool manual wiring, sandboxed HOME
 bash tests/ic_doctor_test.sh        # files/bin/ic-doctor auth and cross-tool checks (sections 6 and 7), sandboxed HOME
+bash tests/ic_workflow_listing_test.sh # files/zsh/ic-workflow.zsh listing commands off a terminal, stub eza
 bash tests/linux_e2e_docker.sh      # real Linux and WSL install in a container
 ```
 
