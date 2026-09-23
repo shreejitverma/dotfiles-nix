@@ -31,6 +31,10 @@ in
   # Apple clang as the default compiler, so only these tools are linked, into a
   # directory of their own. They point at Homebrew's stable opt path, so a brew
   # upgrade needs no rebuild; ic-doctor flags them when llvm is missing.
+  # clang-apply-replacements is what `run-clang-tidy -fix` looks up on PATH,
+  # and git-clang-format (`git clang-format`) formats only the lines a change
+  # touched, which is the right tool when a repo's existing code is not
+  # clang-format clean.
   home.file = lib.genAttrs
     (map (t: ".local/share/ic/llvm-tools/${t}") [
       "clang-format"
