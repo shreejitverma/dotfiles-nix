@@ -631,6 +631,8 @@ assert_grep "$section" 'FAIL  claude: ~/.claude/rules/cpp.md is a real file, not
   "fails naming the merge-and-remove remedy for a hand-written rule file"
 assert_not_grep "$section" 'rules not linked' \
   "does not tell ic-link to fix a real file it deliberately leaves alone"
+assert_not_grep "$section" 'ok    claude: .* rules linked' \
+  "does not also report the rules as linked beside the real-file FAIL"
 
 home=$(new_home claude-layer-dangling)
 plant_wiring "$home"

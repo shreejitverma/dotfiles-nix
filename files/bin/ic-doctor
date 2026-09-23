@@ -417,6 +417,7 @@ if [ -d "$GH_ROOT/agents" ]; then
   # link left pointing at a file the agents repo no longer has.
   for kind in agents rules; do
     n=0
+    linked=0
     unlinked=""
     for f in "$GH_ROOT/agents/claude/$kind"/*.md; do
       [ -f "$f" ] || continue
@@ -424,7 +425,9 @@ if [ -d "$GH_ROOT/agents" ]; then
       dest="$HOME/.claude/$kind/$(basename "$f")"
       if [ -e "$dest" ] && [ ! -L "$dest" ]; then
         bad "claude: ~/.claude/$kind/$(basename "$f") is a real file, not a link (merge it into ~/github/agents/claude/$kind/$(basename "$f"), remove it, then run ic-link)"
-      elif [ "$(readlink "$dest" 2>/dev/null)" != "$f" ]; then
+      elif [ "$(readlink "$dest" 2>/dev/null)" = "$f" ]; then
+        linked=$((linked + 1))
+      else
         unlinked="$unlinked $(basename "$f")"
       fi
     done
@@ -437,7 +440,7 @@ if [ -d "$GH_ROOT/agents" ]; then
     done
     if [ -n "$unlinked" ]; then
       bad "claude: $kind not linked into ~/.claude/$kind:$unlinked (run: ic-link)"
-    elif [ "$n" -gt 0 ]; then
+    elif [ "$n" -gt 0 ] && [ "$linked" -eq "$n" ]; then
       ok "claude: $n $kind linked from ~/github/agents/claude/$kind"
     fi
     if [ -n "$stale" ]; then
