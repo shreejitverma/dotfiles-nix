@@ -24,6 +24,31 @@ in
   programs.zsh.shellAliases.rebuild =
     "/run/current-system/sw/bin/darwin-rebuild switch --flake '${dotfilesDir}#mac'";
 
+  # C++ lint tools on PATH without the compiler. Homebrew's llvm is keg-only
+  # (declared in host.nix), so clang-tidy, clang-format, and run-clang-tidy are
+  # not on PATH by default, and the Claude C++ rules, subagents, and post-edit
+  # hook call them by name. Putting the whole keg's bin on PATH would shadow
+  # Apple clang as the default compiler, so only these tools are linked, into a
+  # directory of their own. They point at Homebrew's stable opt path, so a brew
+  # upgrade needs no rebuild; ic-doctor flags them when llvm is missing.
+  # clang-apply-replacements is what `run-clang-tidy -fix` looks up on PATH,
+  # and git-clang-format (`git clang-format`) formats only the lines a change
+  # touched, which is the right tool when a repo's existing code is not
+  # clang-format clean.
+  home.file = lib.genAttrs
+    (map (t: ".local/share/ic/llvm-tools/${t}") [
+      "clang-format"
+      "clang-tidy"
+      "run-clang-tidy"
+      "clang-apply-replacements"
+      "git-clang-format"
+    ])
+    (name: {
+      source = config.lib.file.mkOutOfStoreSymlink
+        "/opt/homebrew/opt/llvm/bin/${baseNameOf name}";
+    });
+  home.sessionPath = [ "${config.home.homeDirectory}/.local/share/ic/llvm-tools" ];
+
   # Enforce signing only here: the signing key (~/.ssh/id_ed25519_signing,
   # generated manually on this Mac and registered on GitHub) is machine-local,
   # so Linux/WSL activations inherit the format and key from common.nix but

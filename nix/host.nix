@@ -17,6 +17,14 @@
     brews = [
       "autoconf"
       "herdr"
+      # C++ toolchain the agent rules assume: CMake presets with Ninja and
+      # ccache, and Homebrew LLVM for clang-tidy, clang-format, and the
+      # sanitizers Apple clang lacks (MSan, LSan, libFuzzer). llvm stays
+      # keg-only; home/darwin.nix links just its lint tools onto PATH.
+      "cmake"
+      "ninja"
+      "ccache"
+      "llvm"
     ];
     casks = [
       "wezterm"

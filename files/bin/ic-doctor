@@ -4,7 +4,8 @@
 # Verifies the integration layers documented in the README:
 #   1. this repo's checkout path vs the dotfilesDir this platform's entry module declares
 #   2. forks under ~/github (clone, upstream remote, branch, cleanliness)
-#   3. binaries on PATH with working --version
+#   3. binaries on PATH with working --version, plus on macOS the C++ lint
+#      tools linked from Homebrew llvm (warn only)
 #   4. agent skill symlinks (~/.agents/skills and ~/.claude/skills), including
 #      every skill under files/skills in this checkout
 #   5. the daily sync-forks schedule (launchd agent on macOS, systemd user
@@ -13,7 +14,7 @@
 #   7. cross-tool defaults (~/AGENTS.md chain, codex AGENTS.md and skills,
 #      grok AGENTS.md / agent definitions / skills / binary,
 #      gemini AGENTS.md and its context.fileName setting), plus the personal
-#      layer: Claude subagents and rules links, the guard hook script that
+#      layer: Claude subagents and rules links, every hook script that
 #      claude/settings.json runs, and whether the generated manuals are current
 #
 # Read-only: it never mutates anything. Exits non-zero if any check FAILs;
@@ -150,6 +151,23 @@ for t in $BINARIES; do
     bad "$t: not on PATH"
   fi
 done
+
+# The C++ agent rules, subagents, and post-edit hook call these by name. On
+# macOS home/darwin.nix links them from Homebrew's keg-only llvm into their own
+# directory on the login PATH; this script runs on a fixed PATH, so it checks
+# those links directly. A warning, not a FAIL, because only C++ work needs them.
+if [ "$TARGET" = darwin ]; then
+  llvm_dir="$HOME/.local/share/ic/llvm-tools"
+  llvm_missing=""
+  for t in clang-format clang-tidy run-clang-tidy; do
+    [ -x "$llvm_dir/$t" ] || llvm_missing="$llvm_missing $t"
+  done
+  if [ -n "$llvm_missing" ]; then
+    warn "C++ lint tools missing or dangling in ~/.local/share/ic/llvm-tools:$llvm_missing (run: brew install llvm, then rebuild)"
+  else
+    ok "C++ lint tools linked (clang-format, clang-tidy, run-clang-tidy)"
+  fi
+fi
 
 echo "[4/7] agent skills"
 for s in $SKILLS; do
@@ -447,15 +465,22 @@ if [ -d "$GH_ROOT/agents" ]; then
       bad "claude: dangling ~/.claude/$kind links, source gone from ~/github/agents/claude/$kind:$stale (remove: cd ~/.claude/$kind && rm$stale)"
     fi
   done
-  # claude/settings.json runs this hook on every Bash and edit call; a missing
-  # script or interpreter turns every call into a hook error.
-  if grep -q 'claude/hooks/guard.py' "$GH_ROOT/agents/claude/settings.json" 2>/dev/null; then
-    if [ ! -f "$GH_ROOT/agents/claude/hooks/guard.py" ]; then
-      bad "claude: settings.json runs claude/hooks/guard.py, which is missing from ~/github/agents"
-    elif ! command -v python3 >/dev/null 2>&1; then
-      bad "claude: settings.json runs guard.py but python3 is not on PATH"
-    else
-      ok "claude: guard hook present and python3 available"
+  # claude/settings.json runs these hooks around every Bash and edit call. Each
+  # command skips a missing script rather than erroring, so a missing guard or
+  # lint-feedback script means silently running without it; fail loudly here.
+  hooks=$(grep -o 'claude/hooks/[A-Za-z0-9_.-]*\.py' "$GH_ROOT/agents/claude/settings.json" 2>/dev/null | sort -u)
+  if [ -n "$hooks" ]; then
+    hooks_missing=0
+    for h in $hooks; do
+      if [ ! -f "$GH_ROOT/agents/$h" ]; then
+        bad "claude: settings.json runs $h, which is missing from ~/github/agents"
+        hooks_missing=1
+      fi
+    done
+    if ! command -v python3 >/dev/null 2>&1; then
+      bad "claude: settings.json runs hook scripts but python3 is not on PATH"
+    elif [ "$hooks_missing" -eq 0 ]; then
+      ok "claude: hook scripts present and python3 available ($(for h in $hooks; do printf '%s ' "${h##*/}"; done | sed 's/ $//'))"
     fi
   fi
   # The manuals are generated; a stale or hand-edited one ships different rules
