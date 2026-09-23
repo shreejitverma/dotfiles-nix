@@ -56,7 +56,7 @@ The goal is to provide a reusable foundation that you can make your own.
 - `files/.config/wezterm/wezterm.lua` - WezTerm config linked into place
 - `files/.config/herdr/config.toml` - herdr config linked into place
 - `files/bin/` - personal scripts kept on `PATH`, including `sync-forks` (daily fork sync), `ic-link` (symlink farm), and `ic-doctor` (health check)
-- `files/skills/` - agent skills owned by this repo (currently `ship`)
+- `files/skills/` - agent skills owned by this repo (`ship` plus the engineering skills listed under Agent skills below); `setup/lib/skills.sh` finds them
 - `files/zsh/ic-workflow.zsh` - IC workflow shell config sourced by zsh
 - `tests/` - regression tests for the bootstrap scripts, the fork sync script, and the Linux end-to-end install
 - `AGENTS.md` - repo-specific notes for coding agents (`CLAUDE.md` imports it via `@AGENTS.md`)
@@ -290,7 +290,14 @@ Skills live in the clones and are symlinked twice, so every agent runtime sees t
 ```
 
 A skill's name does not have to match its repo: `lavish` comes from `lavish-axi`, `stow` (sweep a session for durable knowledge before a context reset) comes from `firstmate`, and `axi` lives under `.agents/skills` inside its repo.
-One skill is owned by this repo rather than a tool fork: `ship` (`files/skills/ship`), which encodes the end-to-end quality loop below as an invocable skill.
+Skills owned by this repo rather than a tool fork live in `files/skills/`, and every directory there with a `SKILL.md` is linked and checked automatically, so adding one needs no list edit:
+
+- `ship` encodes the end-to-end quality loop below as an invocable skill.
+- `cpp-coding-standards`, `cpp-testing`, `python-testing`, `perf-loop`, `silent-failure-hunt`, and `search-first` cover C++ and Python engineering, including hot-path rules and measured optimization.
+- `mle-workflow`, `data-backfill`, and `decision-ledger` cover research, ML, and data pipelines: point-in-time correctness, provable backfills, and experiment ledgers that survive selection bias.
+- `loop-design-check` reviews autonomous agent loops (overnight `gnhf` runs, green-keepers) before they run unattended, and `learn-eval` promotes a recurring lesson into a new skill behind a quality gate, complementing `stow`, which saves notes but never writes skills.
+
+Those eleven are adapted from [ECC](https://github.com/affaan-m/ecc) under the MIT License; `files/skills/THIRD_PARTY_NOTICES.md` maps each to its source.
 
 **4. Daily sync.**
 `files/bin/sync-forks` reads the fleet manifest (`~/github/.fleet/manifest.yaml`, the single source of truth for the repo list, maintained outside this repo), re-asserts commit identity, and fast-forwards each fork's default branch from upstream.
@@ -476,7 +483,8 @@ If you are reproducing this setup for yourself, create that private repo first w
 ic-link
 ```
 
-`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills`, `~/.codex/skills`, and (when Grok is installed) `~/.grok/skills`, the tool-neutral `~/AGENTS.md` and `~/.codex/AGENTS.md` chain, Grok's own `AGENTS.md` and agent definitions and (when Gemini is installed) `~/.gemini/AGENTS.md` from `~/github/agents`, and the rest of the personal-layer links (skipped with a note if that repo is absent).
+`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills`, `~/.codex/skills`, and (when Grok is installed) `~/.grok/skills`, the tool-neutral `~/AGENTS.md` and `~/.codex/AGENTS.md` chain, Grok's own `AGENTS.md` and agent definitions and (when Gemini is installed) `~/.gemini/AGENTS.md` from `~/github/agents`, Claude subagents and rules into `~/.claude/agents` and `~/.claude/rules`, and the rest of the personal-layer links (skipped with a note if that repo is absent).
+It links one file at a time and never writes into a real file or directory it did not create, so a skill installed by `npx skills`, a subagent made with `/agents`, or a hand-written rule is left alone with a warning.
 Rerun it any time; it repairs stale links in place.
 
 **Step 7: enable the daily sync.**
@@ -540,6 +548,7 @@ A `~/AGENTS.md` still resolving to `~/.claude/CLAUDE.md` while the neutral build
 Agent definitions are optional: an agents repo with no `grok/agents/*.md` is only a warning, while a definition that exists but is not linked is a FAIL.
 A link in `~/.grok/agents` left dangling because its definition was renamed or removed in the agents repo is a FAIL that names the link and the `rm` that clears it; `ic-link` only writes its own links and never deletes inside `~/.grok`.
 When Grok is installed but `~/github/agents` is not cloned, the remaining repo-backed Grok checks are skipped with a single warning, the same way the Claude personal layer is.
+With the agents repo cloned, the personal-layer checks also cover every Claude subagent and rule link (and dangling ones), the guard hook script that `claude/settings.json` runs on every Bash and edit call, and `bin/build-manuals --check`, so a stale or hand-edited manual is caught on the machine and not only in CI.
 Checks that do not apply to a platform are reported as such rather than failed: WSL has no desktop layer, so the linked terminal configs are not expected there, and its sync timer is left disabled because systemd is off by default.
 It exits non-zero if anything needs attention, and every failure line names the command that fixes it.
 A healthy system ends with `ic-doctor: all checks passed`.
@@ -555,6 +564,8 @@ The checklist when adopting the next tool, so it inherits all five layers:
 5. Add it to the `FORKS`, `BINARIES`, and `SKILLS` lists in `files/bin/ic-doctor`.
 6. Optionally add a short alias in `files/zsh/ic-workflow.zsh`.
 7. Run `syncforks-dry` and `ic-doctor` to confirm, then commit the dotfiles change.
+
+A skill owned by this repo needs none of the list edits above: add `files/skills/<name>/SKILL.md` (the `learn-eval` skill does this behind its quality gate), run `ic-link`, confirm with `ic-doctor`, and ship through `no-mistakes`.
 
 ### Troubleshooting
 
@@ -621,7 +632,7 @@ The `ship` skill encodes the whole loop, so any agent in any tool can be told `/
 - Pull the next piece of work with `tasks-axi ready`, and open an isolated worktree for it with `th` so streams of work never collide.
 - Do the work with agents that carry the axi skills: `gh-axi` for everything GitHub, `cda` for anything that needs a real browser, `lavish` when a plan or review is easier to judge as a rich artifact.
 - Ship through `nm` (no-mistakes), which runs review, tests, lint, docs, push, PR, and CI as one gate, so nothing reaches the remote unvalidated.
-- Before ending a long agent session, invoke the `stow` skill so preferences, project facts, and unfinished next steps land on disk instead of dying with the context window.
+- Before ending a long agent session, invoke the `stow` skill so preferences, project facts, and unfinished next steps land on disk instead of dying with the context window; when a stowed lesson keeps recurring, `learn-eval` turns it into a skill.
 - Before bed, hand the backlog to `gn` (gnhf) for a supervised overnight run, and read the results over coffee.
 - Every day at 10:00, `sync-forks` fast-forwards every manifest fork from its upstream, pushes, and reinstalls what changed, notifying only when something needs a human, so the whole toolchain stays current without a thought.
 

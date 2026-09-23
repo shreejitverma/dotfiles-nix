@@ -31,6 +31,9 @@
 #     linked at all
 #   - report the section 6 claude quota read as ok only for a real quota row
 #     with a numeric percentage, and warn on attention lines alone
+#   - check Claude subagent and rule links from ~/github/agents, including
+#     dangling ones, the guard hook script settings.json runs, and whether
+#     build-manuals --check reports the generated manuals current
 #
 # Other ic-doctor sections (checkout path, forks, host binaries) still run and
 # may FAIL; this suite only asserts sections 6 and 7.
@@ -41,7 +44,10 @@ set -uo pipefail
 
 REPO_ROOT="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd .. && pwd)"
 SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/ic-doctor-test.XXXXXX")"
-SKILLS="axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi ship stow tasks-axi"
+# The same set ic-doctor derives: skills from other repos plus files/skills.
+# shellcheck source=../setup/lib/skills.sh
+. "$REPO_ROOT/setup/lib/skills.sh"
+SKILLS="axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi stow tasks-axi $(ic_owned_skills "$REPO_ROOT" | tr '\n' ' ')"
 
 # shellcheck disable=SC2329  # invoked by the EXIT trap
 cleanup() {
@@ -580,6 +586,77 @@ assert_grep "$section" 'warn  quota-axi cannot read claude quota' \
   "attention lines alone do not count as a live claude quota read"
 assert_not_grep "$section" 'ok    quota-axi reads live claude quota' \
   "an unreadable provider never reports the quota read as ok"
+
+# --- Claude subagents, rules, guard hook, and manual drift (personal layer) ---
+plant_claude_layer() {
+  local home="$1"
+  local repo="$home/github/agents"
+  mkdir -p "$repo/claude/agents" "$repo/claude/rules" "$repo/claude/hooks" "$home/.claude/agents" "$home/.claude/rules"
+  printf '%s\n' '# cpp-reviewer' >"$repo/claude/agents/cpp-reviewer.md"
+  printf '%s\n' '# cpp rule' >"$repo/claude/rules/cpp.md"
+  printf '%s\n' '{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"python3 \"$HOME/github/agents/claude/hooks/guard.py\" bash"}]}]}}' >"$repo/claude/settings.json"
+  printf '%s\n' '# guard' >"$repo/claude/hooks/guard.py"
+  ln -sf "$repo/claude/agents/cpp-reviewer.md" "$home/.claude/agents/cpp-reviewer.md"
+  ln -sf "$repo/claude/rules/cpp.md" "$home/.claude/rules/cpp.md"
+}
+
+home=$(new_home claude-layer-healthy)
+plant_wiring "$home"
+plant_claude_layer "$home"
+section=$(run_section7 "$home")
+assert_grep "$section" 'ok    claude: 1 agents linked from ~/github/agents/claude/agents' \
+  "accepts Claude subagents linked from the agents repo"
+assert_grep "$section" 'ok    claude: 1 rules linked from ~/github/agents/claude/rules' \
+  "accepts Claude rules linked from the agents repo"
+assert_grep "$section" 'ok    claude: guard hook present and python3 available' \
+  "accepts the guard hook when settings.json runs it and the script exists"
+assert_not_grep "$section" 'FAIL  claude' \
+  "does not FAIL the healthy Claude layer"
+
+home=$(new_home claude-layer-unlinked)
+plant_wiring "$home"
+plant_claude_layer "$home"
+rm -f "$home/.claude/rules/cpp.md"
+section=$(run_section7 "$home")
+assert_grep "$section" 'FAIL  claude: rules not linked into ~/.claude/rules: cpp.md \(run: ic-link\)' \
+  "fails naming each versioned rule that is not linked"
+
+home=$(new_home claude-layer-dangling)
+plant_wiring "$home"
+plant_claude_layer "$home"
+ln -sf "$home/github/agents/claude/agents/gone.md" "$home/.claude/agents/gone.md"
+ln -sf "$SANDBOX/elsewhere.md" "$home/.claude/agents/foreign.md"
+section=$(run_section7 "$home")
+assert_grep "$section" 'FAIL  claude: dangling ~/.claude/agents links, source gone from ~/github/agents/claude/agents: gone.md' \
+  "fails on a dangling subagent link whose agents-repo source is gone"
+assert_not_grep "$section" 'foreign\.md' \
+  "ignores a dangling link that never pointed into the agents repo"
+
+home=$(new_home claude-guard-missing)
+plant_wiring "$home"
+plant_claude_layer "$home"
+rm -f "$home/github/agents/claude/hooks/guard.py"
+section=$(run_section7 "$home")
+assert_grep "$section" 'FAIL  claude: settings.json runs claude/hooks/guard.py, which is missing' \
+  "fails when settings.json runs a guard hook script that does not exist"
+
+home=$(new_home manuals-stale)
+plant_wiring "$home"
+mkdir -p "$home/github/agents/bin"
+printf '%s\n' '#!/bin/bash' 'echo "build-manuals: CLAUDE.md is stale or hand-edited (run: bin/build-manuals)" >&2' 'exit 1' >"$home/github/agents/bin/build-manuals"
+chmod +x "$home/github/agents/bin/build-manuals"
+section=$(run_section7 "$home")
+assert_grep "$section" 'FAIL  agents manuals are stale or hand-edited: build-manuals: CLAUDE.md is stale' \
+  "fails, quoting build-manuals, when a generated manual is stale"
+
+home=$(new_home manuals-current)
+plant_wiring "$home"
+mkdir -p "$home/github/agents/bin"
+printf '%s\n' '#!/bin/bash' 'exit 0' >"$home/github/agents/bin/build-manuals"
+chmod +x "$home/github/agents/bin/build-manuals"
+section=$(run_section7 "$home")
+assert_grep "$section" 'ok    agents manuals match their sources' \
+  "accepts manuals that build-manuals --check reports current"
 
 echo
 if [ "$FAILS" -eq 0 ]; then

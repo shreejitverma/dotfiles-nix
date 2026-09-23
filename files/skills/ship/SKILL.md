@@ -48,12 +48,20 @@ Use the specialized tools instead of ad hoc equivalents:
 - `chrome-devtools-axi` for anything with a web surface: drive the real page, do not guess.
 - `lavish-axi` when a plan, diff, or comparison is easier to judge as a rich artifact than as prose.
 
+Load the engineering skills where they apply:
+
+- `search-first` before writing a new utility, parser, or dependency.
+- `cpp-coding-standards` and `cpp-testing` for C++, `python-testing` for Python, `mle-workflow` for models, signals, and feature pipelines, `data-backfill` for bulk data movement.
+- `perf-loop` for any performance claim, and `decision-ledger` when running many variants of an experiment.
+- `loop-design-check` before handing a repeating task to an unattended agent loop.
+
 ## 4. Verify end to end
 
 Reproduce bugs in an end-to-end setting before fixing them.
 Run the smallest meaningful check first, then broaden.
 For product changes, exercise the affected flow in the running app or browser, not just the test suite.
 Never claim a verification that was not actually run.
+Before gating, run the `silent-failure-hunt` checklist over the diff for anything that moves data, money, or state.
 
 ## 5. Gate the ship
 
@@ -71,6 +79,7 @@ tasks-axi done <id> --pr <url>
 ```
 
 Record the PR on the task, then sweep durable knowledge (preferences, gotchas, unfinished next steps) to disk with the `stow` skill before the session ends.
+When a lesson keeps recurring across sessions, promote it into a skill with `learn-eval`.
 
 ## When the toolchain misbehaves
 
