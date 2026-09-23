@@ -171,8 +171,8 @@ rebuild
 The alias is included in the shell config, and each platform's profile defines it to mean the right thing:
 
 ```bash
-# macOS
-/run/current-system/sw/bin/darwin-rebuild switch --flake "$HOME/github/dotfiles-nix#mac"
+# macOS (nix-darwin only activates as root, so the alias carries sudo)
+sudo /run/current-system/sw/bin/darwin-rebuild switch --flake "$HOME/github/dotfiles-nix#mac"
 # Linux and WSL
 home-manager switch --flake "$HOME/github/dotfiles-nix#<user>@<linux|wsl>[-aarch64]"
 ```
