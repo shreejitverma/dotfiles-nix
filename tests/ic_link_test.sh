@@ -15,6 +15,10 @@
 #     rewrites that file) or ~/.gemini/GEMINI.md (Gemini's own memory file)
 #   - link Grok's own AGENTS.md, skills, and agent definitions, and Gemini's
 #     own manual, from ~/github/agents when that repo is present
+#   - link every files/skills/<name> this repo owns into the declared
+#     dotfilesDir, and never write a link inside a real skill directory
+#   - link Claude subagents and rules from ~/github/agents one file at a time,
+#     keeping files Claude wrote and never replacing a hand-written file
 #
 # Nothing touches the real home directory or the network.
 # Honours DEBUG_KEEP_SANDBOX=1 to leave the scratch directory on disk.
@@ -24,6 +28,8 @@ set -uo pipefail
 
 REPO_ROOT="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd .. && pwd)"
 SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/ic-link-test.XXXXXX")"
+# shellcheck source=../setup/lib/skills.sh
+. "$REPO_ROOT/setup/lib/skills.sh"
 
 # shellcheck disable=SC2329  # invoked by the EXIT trap
 cleanup() {
@@ -216,6 +222,69 @@ if grep -q "preexisting" "$home/.grok/AGENTS.md"; then
 else
   fail "preexisting ~/.grok/AGENTS.md was replaced even though GROK.md is missing"
 fi
+
+# --- this repo's own skills: every files/skills/<name>, linked into the declared checkout ---
+home=$(new_home owned-skills)
+seed_agents_repo "$home"
+mkdir -p "$home/.grok"
+run_link "$home"
+for s in $(ic_owned_skills "$REPO_ROOT"); do
+  assert_eq "$(readlink "$home/.agents/skills/$s")" "$home/github/dotfiles-nix/files/skills/$s" \
+    "owned skill $s links into the declared dotfilesDir, not the invoking checkout"
+  assert_eq "$(readlink "$home/.claude/skills/$s")" "../../.agents/skills/$s" "owned skill $s is mirrored for Claude"
+  assert_eq "$(readlink "$home/.grok/skills/$s")" "../../.agents/skills/$s" "owned skill $s is mirrored for Grok"
+done
+
+# --- a real directory where a skill link belongs is left alone, not written into ---
+home=$(new_home skill-real-dir)
+seed_agents_repo "$home"
+mkdir -p "$home/.agents/skills/ship"
+printf '%s\n' '# installed by another tool' >"$home/.agents/skills/ship/SKILL.md"
+out=$(HOME="$home" "$REPO_ROOT/files/bin/ic-link" 2>&1)
+rc=$?
+assert_eq "$rc" "0" "ic-link exits 0 when a skill path is a real directory"
+if grep -q "skills/ship is a real directory" <<<"$out"; then
+  ok "warns when a skill path is a real directory"
+else
+  fail "should warn when a skill path is a real directory"
+fi
+assert_no_path "$home/.agents/skills/ship/ship" "does not create a link inside the real directory"
+assert_eq "$(cat "$home/.agents/skills/ship/SKILL.md")" "# installed by another tool" \
+  "the real directory's content is untouched"
+
+# --- Claude subagents and rules from the agents repo, one link per file ---
+home=$(new_home claude-layer)
+seed_agents_repo "$home"
+mkdir -p "$home/github/agents/claude/agents" "$home/github/agents/claude/rules" "$home/.claude/agents"
+printf '%s\n' '# cpp-reviewer' >"$home/github/agents/claude/agents/cpp-reviewer.md"
+printf '%s\n' '# cpp' >"$home/github/agents/claude/rules/cpp.md"
+printf '%s\n' '# python' >"$home/github/agents/claude/rules/python.md"
+printf '%s\n' '# made with /agents' >"$home/.claude/agents/own-agent.md"
+run_link "$home"
+assert_eq "$(readlink "$home/.claude/agents/cpp-reviewer.md")" "$home/github/agents/claude/agents/cpp-reviewer.md" \
+  "Claude subagent is linked from the agents repo"
+assert_eq "$(readlink "$home/.claude/rules/cpp.md")" "$home/github/agents/claude/rules/cpp.md" \
+  "Claude rule is linked from the agents repo"
+assert_eq "$(readlink "$home/.claude/rules/python.md")" "$home/github/agents/claude/rules/python.md" \
+  "every Claude rule file is linked"
+assert_eq "$(cat "$home/.claude/agents/own-agent.md")" "# made with /agents" \
+  "a subagent Claude itself wrote is kept"
+
+# --- a hand-written rule file is never replaced by a link ---
+home=$(new_home claude-rule-real-file)
+seed_agents_repo "$home"
+mkdir -p "$home/github/agents/claude/rules" "$home/.claude/rules"
+printf '%s\n' '# versioned' >"$home/github/agents/claude/rules/cpp.md"
+printf '%s\n' '# hand written' >"$home/.claude/rules/cpp.md"
+out=$(HOME="$home" "$REPO_ROOT/files/bin/ic-link" 2>&1)
+if grep -q "rules/cpp.md is a real file" <<<"$out"; then
+  ok "warns when a rule path is a real file"
+else
+  fail "should warn when a rule path is a real file"
+fi
+assert_eq "$(readlink "$home/.claude/rules/cpp.md" 2>/dev/null || echo not-a-symlink)" "not-a-symlink" \
+  "a hand-written rule file is not replaced with a link"
+assert_eq "$(cat "$home/.claude/rules/cpp.md")" "# hand written" "a hand-written rule file keeps its content"
 
 echo
 if [ "$FAILS" -eq 0 ]; then

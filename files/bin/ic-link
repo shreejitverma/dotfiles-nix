@@ -4,11 +4,13 @@
 # Idempotent: safe to run any time; ln -sfn replaces stale links in place.
 # This is the versioned recipe for the wiring that ic-doctor verifies:
 #   - agent skills into ~/.agents/skills, mirrored to ~/.claude/skills,
-#     ~/.codex/skills, and ~/.grok/skills (when Grok is installed)
+#     ~/.codex/skills, and ~/.grok/skills (when Grok is installed); every
+#     directory under files/skills is one of them, found by setup/lib/skills.sh
 #   - the cross-tool instruction chain (~/AGENTS.md, ~/.codex/AGENTS.md),
 #     plus each tool's own manual for Grok and Gemini
 #   - Grok's own AGENTS.md and agent definitions (never Claude's)
-#   - the personal layer from the private ~/github/agents repo, if present
+#   - the personal layer from the private ~/github/agents repo, if present,
+#     including Claude subagents (~/.claude/agents) and rules (~/.claude/rules)
 set -euo pipefail
 
 GH_ROOT="$HOME/github"
@@ -19,6 +21,8 @@ SELF_REPO=$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=../../setup/lib/platform.sh
 . "$SELF_REPO/setup/lib/platform.sh"
+# shellcheck source=../../setup/lib/skills.sh
+. "$SELF_REPO/setup/lib/skills.sh"
 
 # The links below are durable state in $HOME and are read long after ic-link
 # exits, so they point at the checkout the entry module declares as dotfilesDir,
@@ -49,29 +53,45 @@ else
   DOTFILES="$SELF_REPO"
 fi
 if [ ! -d "$DOTFILES" ]; then
-  echo "ic-link: warning: declared dotfilesDir $DOTFILES does not exist; the ship skill link will dangle until the repo is cloned there" >&2
+  echo "ic-link: warning: declared dotfilesDir $DOTFILES does not exist; the links to this repo's own skills will dangle until the repo is cloned there" >&2
 fi
 
 # Skills whose directory name matches their repo name.
 REGULAR_SKILLS="chrome-devtools-axi gh-axi gnhf no-mistakes quota-axi tasks-axi"
+# Skills this repo owns: every files/skills/<name>/SKILL.md in this checkout.
+OWNED_SKILLS=$(ic_owned_skills "$SELF_REPO" | tr '\n' ' ')
 # All skills, for mirroring into per-tool skill directories.
-ALL_SKILLS="axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi ship stow tasks-axi"
+ALL_SKILLS="axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi stow tasks-axi $OWNED_SKILLS"
+
+# ln -sfn replaces a symlink in place, but pointed at a real directory it would
+# create the link inside that directory instead. Skill directories can hold real
+# directories written by other installers (npx skills), so refuse those loudly
+# rather than scribbling into them.
+link_skill() { # <target> <link>
+  if [ -d "$2" ] && [ ! -L "$2" ]; then
+    echo "ic-link: warning: $2 is a real directory, not a link; left untouched (move it aside, then rerun ic-link)" >&2
+    return 0
+  fi
+  ln -sfn "$1" "$2"
+}
 
 mkdir -p "$HOME/.agents/skills" "$HOME/.claude/skills" "$HOME/.codex/skills"
 
 # 1. Canonical skill links: ~/.agents/skills/<name> -> source in a clone.
 for s in $REGULAR_SKILLS; do
-  ln -sfn "$GH_ROOT/$s/skills/$s" "$HOME/.agents/skills/$s"
+  link_skill "$GH_ROOT/$s/skills/$s" "$HOME/.agents/skills/$s"
 done
-ln -sfn "$GH_ROOT/lavish-axi/skills/lavish"  "$HOME/.agents/skills/lavish"
-ln -sfn "$GH_ROOT/firstmate/skills/stow"     "$HOME/.agents/skills/stow"
-ln -sfn "$GH_ROOT/axi/.agents/skills/axi"    "$HOME/.agents/skills/axi"
-ln -sfn "$DOTFILES/files/skills/ship"        "$HOME/.agents/skills/ship"
+link_skill "$GH_ROOT/lavish-axi/skills/lavish"  "$HOME/.agents/skills/lavish"
+link_skill "$GH_ROOT/firstmate/skills/stow"     "$HOME/.agents/skills/stow"
+link_skill "$GH_ROOT/axi/.agents/skills/axi"    "$HOME/.agents/skills/axi"
+for s in $OWNED_SKILLS; do
+  link_skill "$DOTFILES/files/skills/$s" "$HOME/.agents/skills/$s"
+done
 
 # 2. Mirrors: every consumer sees the same canonical set.
 for s in $ALL_SKILLS; do
-  ln -sfn "../../.agents/skills/$s" "$HOME/.claude/skills/$s"
-  ln -sfn "../../.agents/skills/$s" "$HOME/.codex/skills/$s"
+  link_skill "../../.agents/skills/$s" "$HOME/.claude/skills/$s"
+  link_skill "../../.agents/skills/$s" "$HOME/.codex/skills/$s"
 done
 
 # 3. Cross-tool instruction chain.
@@ -96,6 +116,21 @@ if [ -d "$AGENTS_REPO" ]; then
   ln -sf "$AGENTS_REPO/OPINIONS.md"          "$HOME/OPINIONS.md"
   ln -sf "$AGENTS_REPO/VOICE.md"             "$HOME/VOICE.md"
   ln -sf "$AGENTS_REPO/claude/settings.json" "$HOME/.claude/settings.json"
+  # Claude subagents and user-level rules, one link per file, so anything Claude
+  # itself writes into these directories (/agents creates files there) is kept.
+  for kind in agents rules; do
+    [ -d "$AGENTS_REPO/claude/$kind" ] || continue
+    mkdir -p "$HOME/.claude/$kind"
+    for f in "$AGENTS_REPO/claude/$kind"/*.md; do
+      [ -f "$f" ] || continue
+      dest="$HOME/.claude/$kind/$(basename "$f")"
+      if [ -e "$dest" ] && [ ! -L "$dest" ]; then
+        echo "ic-link: warning: $dest is a real file, not a link; left untouched (merge it into $f, remove it, then rerun ic-link)" >&2
+        continue
+      fi
+      ln -sf "$f" "$dest"
+    done
+  done
   personal_layer=1
 else
   personal_layer=0
@@ -108,7 +143,7 @@ fi
 if [ -d "$HOME/.grok" ]; then
   mkdir -p "$HOME/.grok/skills" "$HOME/.grok/agents"
   for s in $ALL_SKILLS; do
-    ln -sfn "../../.agents/skills/$s" "$HOME/.grok/skills/$s"
+    link_skill "../../.agents/skills/$s" "$HOME/.grok/skills/$s"
   done
   if [ "$personal_layer" -eq 1 ]; then
     if [ -f "$AGENTS_REPO/GROK.md" ]; then
