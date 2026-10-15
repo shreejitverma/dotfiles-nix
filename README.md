@@ -300,11 +300,11 @@ Skills owned by this repo rather than a tool fork live in `files/skills/`, and e
 Those eleven are adapted from [ECC](https://github.com/affaan-m/ecc) under the MIT License; `files/skills/THIRD_PARTY_NOTICES.md` maps each to its source.
 
 **4. Daily sync.**
-`files/bin/sync-forks` reads the fleet manifest (`~/github/.fleet/manifest.yaml`, the single source of truth for the repo list, maintained outside this repo), re-asserts commit identity, and fast-forwards each fork's default branch from upstream.
+`files/bin/sync-forks` reads the fleet manifest (`~/github/.fleet/manifest.yaml`, the single source of truth for the repo list, maintained outside this repo), re-asserts commit identity, and fast-forwards each `sync: true` fork's default branch from upstream; `sync: false` forks are only fetched and measured.
 It never merges: a fork with local commits is reported as diverged (or ahead) and left untouched, locally and on GitHub.
 When a fast-forward actually updated a repo, it pushes the fork and re-runs that repo's install command from the manifest.
 A launchd agent defined in `nix/home/darwin.nix` runs it daily at 10:00 on macOS, with `RunAtLoad` catching runs missed while the machine was off; `nix/home/linux.nix` schedules the same run as a systemd user timer, and `nix/home/wsl.nix` ships that timer disabled.
-Logs land in `~/github/.fleet/logs/` with 30-day rotation, and a desktop notification fires on failure only.
+Logs land in `~/github/.fleet/logs/` with 30-day rotation, and a desktop notification fires only when something needs a human: a failure, a diverged fork, or a `sync: false` fork behind upstream.
 `syncforks` and `syncforks-dry` run it by hand.
 
 **5. Shell ergonomics.**
@@ -611,7 +611,11 @@ A skill owned by this repo needs none of the list edits above: add `files/skills
 - **quota-axi shows `auth_required` for claude.**
   Keychain access has not been granted; run `quota-axi --allow-keychain-prompt auth` and click "Always Allow".
 - **sync-forks skipped a repo.**
-  By design it skips uncommitted changes, an in-progress rebase or merge, a branch other than the manifest's default branch, an uncloned manifest entry, unpushed local commits, and `sync: false` entries; the log line names the reason.
+  By design it skips uncommitted changes, an in-progress rebase or merge, a branch other than the manifest's default branch, an uncloned manifest entry, and unpushed local commits; the log line names the reason.
+  A `sync: false` entry is fetched and measured only.
+  When it is behind upstream the log names the counts and, if no failure or diverged fork outranks it, one notification asks for a manual merge.
+  A `sync: false` entry that cannot be measured (no `upstream` remote, a failed fetch, or a missing local or upstream branch) fails like any other repo.
+  The branch and the fork remote are left untouched.
   Fix the cause and rerun `syncforks`.
 - **sync-forks reported a diverged fork.**
   It never merges: a fork that is both ahead of and behind upstream is left untouched, locally and on GitHub.
@@ -635,7 +639,9 @@ The `ship` skill encodes the whole loop, so any agent in any tool can be told `/
 - Ship through `nm` (no-mistakes), which runs review, tests, lint, docs, push, PR, and CI as one gate, so nothing reaches the remote unvalidated.
 - Before ending a long agent session, invoke the `stow` skill so preferences, project facts, and unfinished next steps land on disk instead of dying with the context window; when a stowed lesson keeps recurring, `learn-eval` turns it into a skill.
 - Before bed, hand the backlog to `gn` (gnhf) for a supervised overnight run, and read the results over coffee.
-- Every day at 10:00, `sync-forks` fast-forwards every manifest fork from its upstream, pushes, and reinstalls what changed, notifying only when something needs a human, so the whole toolchain stays current without a thought.
+- Every day at 10:00, `sync-forks` fast-forwards every `sync: true` fork from its upstream, pushes, and reinstalls what changed.
+  `sync: false` forks are fetched and, when behind, named for a manual merge.
+  It notifies only when something needs a human, so the toolchain stays current without a thought.
 
 ## Related
 
