@@ -613,7 +613,8 @@ A skill owned by this repo needs none of the list edits above: add `files/skills
 - **sync-forks skipped a repo.**
   By design it skips uncommitted changes, an in-progress rebase or merge, a branch other than the manifest's default branch, an uncloned manifest entry, and unpushed local commits; the log line names the reason.
   A `sync: false` entry is fetched and measured only.
-  When it is behind upstream the log names the counts and, if nothing else failed, one notification asks for a manual merge.
+  When it is behind upstream the log names the counts and, if no failure or diverged fork outranks it, one notification asks for a manual merge.
+  A `sync: false` entry that cannot be measured (no `upstream` remote, a failed fetch, or a missing local or upstream branch) fails like any other repo.
   The branch and the fork remote are left untouched.
   Fix the cause and rerun `syncforks`.
 - **sync-forks reported a diverged fork.**

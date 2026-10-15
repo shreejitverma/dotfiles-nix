@@ -455,6 +455,45 @@ assert_grep "$HOME_M/notifications.log" 'sync-forks: manual upstream sync' "M: m
 assert_grep "$HOME_M/notifications.log" 'papa-manual' "M: notification names the fork"
 
 # =============================================================================
+# Scenario group N: a sync:false fork that cannot be measured fails rather than
+# reading as behind or as up to date.
+# quebec-noupstream  sync: false, no upstream remote          -> failed
+# romeo-nobranch     sync: false, 2 behind, local main renamed -> failed
+# sierra-behind      sync: false, 1 behind                    -> manual
+# tango-nokey        no sync: key, 1 behind                   -> never mentioned
+# Expected notification: exactly one, "failures", naming quebec and romeo.
+# =============================================================================
+echo "== scenario N: unmeasurable sync:false fork fails =="
+HOME_N="$(new_home n)"
+make_fork quebec-noupstream 1 0 "$HOME_N"
+git -C "$HOME_N/github/quebec-noupstream" remote remove upstream
+make_fork romeo-nobranch 2 0 "$HOME_N"
+git -C "$HOME_N/github/romeo-nobranch" branch -m main work
+make_fork sierra-behind 1 0 "$HOME_N"
+make_fork tango-nokey 1 0 "$HOME_N"
+cat >"$HOME_N/github/.fleet/manifest.yaml" <<EOF
+- name: quebec-noupstream
+  sync: false
+- name: romeo-nobranch
+  sync: false
+- name: sierra-behind
+  sync: false
+- name: tango-nokey
+EOF
+run_sync "$HOME_N" >"$SANDBOX/run-n.out" 2>&1
+assert_eq "$?" 0 "N: sync-forks exits 0"
+LOG_N="$HOME_N/github/.fleet/logs/sync-$TODAY.log"
+assert_grep "$LOG_N" '\[quebec-noupstream\] manual-sync: no upstream remote -> failed' "N: missing upstream remote fails"
+assert_grep "$LOG_N" '\[romeo-nobranch\] manual-sync: no local main' "N: missing local branch fails"
+assert_not_grep "$LOG_N" '\[romeo-nobranch\] manual-sync: behind=' "N: missing local branch not read as 0/0"
+assert_grep "$LOG_N" 'failed:\[ quebec-noupstream romeo-nobranch \]' "N: summary lists both as failed"
+assert_grep "$LOG_N" 'manual:\[ sierra-behind \]' "N: only the measured behind fork is manual"
+assert_not_grep "$LOG_N" 'tango-nokey' "N: entry with no sync: key is ignored"
+assert_eq "$(wc -l <"$HOME_N/notifications.log" | tr -d ' ')" 1 "N: exactly one notification"
+assert_grep "$HOME_N/notifications.log" 'sync-forks: failures' "N: failure notification outranks manual"
+assert_grep "$HOME_N/notifications.log" 'romeo-nobranch' "N: failure notification names the unmeasured fork"
+
+# =============================================================================
 # Scenario group F: ic-workflow.zsh sources the generated fleet aliases.
 # =============================================================================
 echo "== scenario F: fleet aliases hook =="
