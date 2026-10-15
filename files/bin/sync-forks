@@ -21,6 +21,9 @@
 # Safe by design: skips dirty trees and in-progress rebases/merges, skips
 # repos not on their default branch, is non-fatal per repo, never force-pushes,
 # and notifies only on failure. Run with --dry-run to only report drift.
+# sync:false entries are never merged or pushed. They are fetched and, when
+# behind upstream, named in the log and (if nothing more serious failed) in
+# one notification, so a deliberate fork cannot drift in silence.
 set -uo pipefail
 
 # Platform differences (PATH, notifications) live in one place, shared with
@@ -79,6 +82,21 @@ manifest_entries() {
   ' "$MANIFEST"
 }
 
+# sync:false entries. Reported, never merged and never pushed. Same line format
+# as the sync:true parser, without an install field.
+manifest_manual_entries() {
+  awk '
+    function flush() {
+      if (name != "" && sync == "false") printf "%s|%s\n", name, branch
+      name = ""; branch = "main"; sync = ""
+    }
+    /^- name:/           { flush(); name = $3 }
+    /^  default_branch:/ { branch = $2 }
+    /^  sync:/           { sync = $2 }
+    END { flush() }
+  ' "$MANIFEST"
+}
+
 # Re-assert identity: a local override silently defeats the global setting and
 # is the #1 way forks end up with the wrong author. Remove it, then verify the
 # resolved identity; a mismatch after that means a wider-scope config (e.g. a
@@ -132,12 +150,17 @@ entry_count=0
 entry_word="entries"
 [ "$entry_count" -eq 1 ] && entry_word="entry"
 log "manifest: $entry_count sync-eligible $entry_word"
-if [ "$entry_count" -eq 0 ]; then
+# A manifest of only sync:false forks is valid. Format drift is zero of both.
+manual_entries="$(manifest_manual_entries)"
+manual_count=0
+[ -n "$manual_entries" ] && manual_count="$(printf '%s\n' "$manual_entries" | wc -l | tr -d ' ')"
+if [ "$entry_count" -eq 0 ] && [ "$manual_count" -eq 0 ]; then
   log "ERROR: manifest exists but yielded 0 sync-eligible entries (format drift?)"
   [ "$DRY" -eq 0 ] && notify "sync-forks: manifest parse failure" "0 sync-eligible entries parsed from $MANIFEST"
   exit 1
 fi
 
+if [ "$entry_count" -gt 0 ]; then
 while IFS='|' read -r r branch install; do
   d="$GH_ROOT/$r"
   [ -d "$d/.git" ] || { log "[$r] not cloned, skip"; skipped="$skipped $r"; continue; }
@@ -248,15 +271,53 @@ while IFS='|' read -r r branch install; do
     failed="$failed $r"
   fi
 done < <(printf '%s\n' "$entries")
+fi
 
-log "===== done. synced:[$synced ] diverged:[$diverged ] skipped:[$skipped ] failed:[$failed ] ====="
+# sync:false forks carry local commits on purpose, so they can never
+# fast-forward. Fetch and measure only. A non-zero behind count is the signal
+# that a human merge is due; the branch and the fork remote stay untouched.
+manual=""
+if [ -n "$manual_entries" ]; then
+  while IFS='|' read -r r branch; do
+    d="$GH_ROOT/$r"
+    if [ ! -d "$d/.git" ]; then
+      log "[$r] manual-sync: not cloned, skip"
+      continue
+    fi
+    if ! git -C "$d" remote get-url upstream >/dev/null 2>&1; then
+      log "[$r] manual-sync: no upstream remote"
+      manual="$manual $r"
+      continue
+    fi
+    if ! git -C "$d" fetch --quiet upstream 2>>"$LOG"; then
+      log "[$r] manual-sync: fetch failed"
+      manual="$manual $r"
+      continue
+    fi
+    if ! git -C "$d" rev-parse --verify --quiet "refs/remotes/upstream/$branch" >/dev/null; then
+      log "[$r] manual-sync: no upstream/$branch after fetch"
+      manual="$manual $r"
+      continue
+    fi
+    behind=$(git -C "$d" rev-list --count "$branch..upstream/$branch" 2>/dev/null || echo 0)
+    ahead=$(git -C "$d" rev-list --count "upstream/$branch..$branch" 2>/dev/null || echo 0)
+    log "[$r] manual-sync: behind=$behind ahead=$ahead (sync:false, left untouched)"
+    [ "$behind" -gt 0 ] && manual="$manual $r"
+  done < <(printf '%s\n' "$manual_entries")
+fi
 
-# Notify on failure only: diverged forks and hard failures need a human;
-# a quiet success needs nothing. A dry run is report-only and never notifies.
+log "===== done. synced:[$synced ] diverged:[$diverged ] skipped:[$skipped ] failed:[$failed ] manual:[$manual ] ====="
+
+# Notify on failure only: diverged forks, hard failures, and sync:false forks
+# that have fallen behind all need a human. A quiet success needs nothing.
+# A dry run is report-only and never notifies. Failures outrank divergence,
+# which outranks a behind sync:false fork.
 if [ "$DRY" -eq 0 ]; then
   if [ -n "$failed" ]; then
     notify "sync-forks: failures" "Failed:$failed"
   elif [ -n "$diverged" ]; then
     notify "sync-forks: diverged forks" "Manual reconcile needed:$diverged"
+  elif [ -n "$manual" ]; then
+    notify "sync-forks: manual upstream sync" "sync:false forks behind upstream:$manual"
   fi
 fi

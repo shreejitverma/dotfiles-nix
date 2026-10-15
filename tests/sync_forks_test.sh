@@ -127,7 +127,7 @@ TODAY="$(date +%Y%m%d)"
 # charlie-diverged  1 ahead + 1 behind          -> DIVERGED, untouched
 # delta-dirty       1 behind, dirty tree        -> skipped
 # echo-branch       1 behind, on feature branch -> skipped
-# foxtrot-nosync    sync: false                 -> never mentioned
+# foxtrot-nosync    sync: false, 1 behind       -> reported, branch and origin untouched
 # golf-missing      in manifest, not cloned     -> skipped
 # mike-ahead        2 ahead, 0 behind           -> reported, never published
 # Expected notification: exactly one, "diverged" (no failures).
@@ -180,6 +180,7 @@ touch "$HOME_A/github/.fleet/logs/sync-fresh.log"
 CHARLIE_BEFORE="$(sha "$HOME_A/github/charlie-diverged")"
 CHARLIE_ORIGIN_BEFORE="$(sha "$REMOTES/charlie-diverged-or.git")"
 DELTA_BEFORE="$(sha "$HOME_A/github/delta-dirty")"
+FOX_BEFORE="$(sha "$HOME_A/github/foxtrot-nosync")"
 FOX_ORIGIN_BEFORE="$(sha "$REMOTES/foxtrot-nosync-or.git")"
 MIKE_BEFORE="$(sha "$HOME_A/github/mike-ahead")"
 MIKE_ORIGIN_BEFORE="$(sha "$REMOTES/mike-ahead-or.git")"
@@ -226,9 +227,12 @@ assert_eq "$(sha "$HOME_A/github/delta-dirty")" "$DELTA_BEFORE" "A: delta branch
 assert_grep "$LOG_A" "\\[echo-branch\\] on 'feature', not default 'main' -> skipped" "A: echo on feature branch skipped"
 assert_eq "$(git -C "$HOME_A/github/echo-branch" symbolic-ref --short HEAD)" feature "A: echo still on feature branch"
 
-# foxtrot (sync: false): never processed. golf: not cloned, skipped.
-assert_not_grep "$LOG_A" 'foxtrot-nosync' "A: sync:false repo never mentioned"
+# foxtrot (sync: false): measured and left untouched. golf: not cloned, skipped.
+assert_grep "$LOG_A" '\[foxtrot-nosync\] manual-sync: behind=1 ahead=0' "A: sync:false repo reports how far behind it is"
+assert_eq "$(sha "$HOME_A/github/foxtrot-nosync")" "$FOX_BEFORE" "A: sync:false local branch untouched"
 assert_eq "$(sha "$REMOTES/foxtrot-nosync-or.git")" "$FOX_ORIGIN_BEFORE" "A: sync:false fork origin untouched"
+assert_not_grep "$HOME_A/gh-calls.log" 'foxtrot-nosync' "A: gh repo sync NOT called for a sync:false repo"
+assert_grep "$LOG_A" 'manual:\[ foxtrot-nosync \]' "A: summary names the behind sync:false repo"
 assert_grep "$LOG_A" '\[golf-missing\] not cloned, skip' "A: uncloned repo skipped"
 
 # mike: ahead-only -> reported, never auto-published to the fork origin.
@@ -424,6 +428,31 @@ assert_eq "$(wc -l <"$HOME_H/notifications.log" | tr -d ' ')" 1 "H: exactly one 
 assert_grep "$HOME_H/notifications.log" 'sync-forks: failures' "H: failure notification fired"
 assert_grep "$HOME_H/notifications.log" 'oscar-down' "H: failure notification names the persistent repo"
 assert_not_grep "$HOME_H/notifications.log" 'november-flaky' "H: recovered repo not reported as failed"
+
+# =============================================================================
+# Scenario group M: a sync:false fork that is behind is the notification when
+# nothing else failed. The local branch and the fork remote stay put, and
+# gh repo sync is not called. An ahead count does not suppress the report.
+# =============================================================================
+echo "== scenario M: sync:false behind notifies =="
+HOME_M="$(new_home m)"
+make_fork papa-manual 3 1 "$HOME_M"
+PAPA_BEFORE="$(sha "$HOME_M/github/papa-manual")"
+PAPA_ORIGIN_BEFORE="$(sha "$REMOTES/papa-manual-or.git")"
+cat >"$HOME_M/github/.fleet/manifest.yaml" <<EOF
+- name: papa-manual
+  sync: false
+EOF
+run_sync "$HOME_M" >"$SANDBOX/run-m.out" 2>&1
+assert_eq "$?" 0 "M: sync-forks exits 0"
+LOG_M="$HOME_M/github/.fleet/logs/sync-$TODAY.log"
+assert_grep "$LOG_M" '\[papa-manual\] manual-sync: behind=3 ahead=1' "M: behind and ahead both reported"
+assert_eq "$(sha "$HOME_M/github/papa-manual")" "$PAPA_BEFORE" "M: local branch untouched"
+assert_eq "$(sha "$REMOTES/papa-manual-or.git")" "$PAPA_ORIGIN_BEFORE" "M: fork origin untouched"
+assert_not_grep "$HOME_M/gh-calls.log" 'papa-manual' "M: gh repo sync not called"
+assert_eq "$(wc -l <"$HOME_M/notifications.log" | tr -d ' ')" 1 "M: exactly one notification"
+assert_grep "$HOME_M/notifications.log" 'sync-forks: manual upstream sync' "M: manual notification fired"
+assert_grep "$HOME_M/notifications.log" 'papa-manual' "M: notification names the fork"
 
 # =============================================================================
 # Scenario group F: ic-workflow.zsh sources the generated fleet aliases.

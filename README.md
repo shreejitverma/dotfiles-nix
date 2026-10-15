@@ -611,7 +611,10 @@ A skill owned by this repo needs none of the list edits above: add `files/skills
 - **quota-axi shows `auth_required` for claude.**
   Keychain access has not been granted; run `quota-axi --allow-keychain-prompt auth` and click "Always Allow".
 - **sync-forks skipped a repo.**
-  By design it skips uncommitted changes, an in-progress rebase or merge, a branch other than the manifest's default branch, an uncloned manifest entry, unpushed local commits, and `sync: false` entries; the log line names the reason.
+  By design it skips uncommitted changes, an in-progress rebase or merge, a branch other than the manifest's default branch, an uncloned manifest entry, and unpushed local commits; the log line names the reason.
+  A `sync: false` entry is fetched and measured only.
+  When it is behind upstream the log names the counts and, if nothing else failed, one notification asks for a manual merge.
+  The branch and the fork remote are left untouched.
   Fix the cause and rerun `syncforks`.
 - **sync-forks reported a diverged fork.**
   It never merges: a fork that is both ahead of and behind upstream is left untouched, locally and on GitHub.
@@ -635,7 +638,9 @@ The `ship` skill encodes the whole loop, so any agent in any tool can be told `/
 - Ship through `nm` (no-mistakes), which runs review, tests, lint, docs, push, PR, and CI as one gate, so nothing reaches the remote unvalidated.
 - Before ending a long agent session, invoke the `stow` skill so preferences, project facts, and unfinished next steps land on disk instead of dying with the context window; when a stowed lesson keeps recurring, `learn-eval` turns it into a skill.
 - Before bed, hand the backlog to `gn` (gnhf) for a supervised overnight run, and read the results over coffee.
-- Every day at 10:00, `sync-forks` fast-forwards every manifest fork from its upstream, pushes, and reinstalls what changed, notifying only when something needs a human, so the whole toolchain stays current without a thought.
+- Every day at 10:00, `sync-forks` fast-forwards every `sync: true` fork from its upstream, pushes, and reinstalls what changed.
+  `sync: false` forks are fetched and, when behind, named for a manual merge.
+  It notifies only when something needs a human, so the toolchain stays current without a thought.
 
 ## Related
 
