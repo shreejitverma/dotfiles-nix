@@ -249,6 +249,7 @@ This section documents how it is wired on my system today, and then gives the ex
 | [firstmate](https://github.com/kunchenguid/firstmate) | Talk to one agent, ship with a crew; agent-of-agents workspace and the default entry point for all AI work | `fm` shell function |
 | [gnhf](https://github.com/kunchenguid/gnhf) | "Good night, have fun": supervised overnight agent coding runs | `gnhf` |
 | [wheelhouse](https://github.com/ImZoomBoy/wheelhouse) | Cross-repo "what needs my decision" queue on GitHub Issues + Actions | runs on GitHub |
+| [archify](https://github.com/tt-a1i/archify) | Validated, browser-checked interactive HTML diagrams and one-page explainers from a description, Mermaid, or a traced repository | skill only |
 
 ### How it is integrated on this machine
 
@@ -262,7 +263,7 @@ origin   -> https://github.com/shreejitverma/<repo>.git
 upstream -> https://github.com/kunchenguid/<repo>.git
 ```
 
-One parent is not under `kunchenguid`: `wheelhouse` tracks `ImZoomBoy/wheelhouse`, where the project lives since the original repository was removed.
+Two parents are not under `kunchenguid`: `wheelhouse` tracks `ImZoomBoy/wheelhouse`, where the project lives since the original repository was removed, and `archify` tracks `tt-a1i/archify`.
 The fleet manifest records each repo's actual parent, and the fleet doctor checks every `upstream` remote against it.
 
 This is what makes local commits safe: the sync is fast-forward-only, so a fork with its own commits (like wheelhouse's `Configure fleet for shreejitverma`) is reported as diverged and left untouched rather than merged or clobbered.
@@ -280,6 +281,7 @@ Node tools are built with `pnpm` and put on `PATH` with `npm link`, so the linke
 `firstmate` is pure shell and is entered through the `firstmate` function in `files/zsh/ic-workflow.zsh`.
 `axi` ships no daily-use binary; it contributes its skill and SDK source.
 `wheelhouse` runs entirely on GitHub Actions inside the fork; nothing is built locally.
+`archify` needs no build or `npm install`: its skill runs `node bin/archify.mjs` straight from the clone, and the fleet manifest's install command is its offline `doctor` self-check, so `sync-forks` fails loudly if an upstream change breaks the package.
 
 **3. Agent skills.**
 Skills live in the clones and are symlinked twice, so every agent runtime sees the same live copy and a rebuild of a clone updates the skill in place:
@@ -289,7 +291,8 @@ Skills live in the clones and are symlinked twice, so every agent runtime sees t
 ~/.claude/skills/<name>  -> ../../.agents/skills/<name>
 ```
 
-A skill's name does not have to match its repo: `lavish` comes from `lavish-axi`, `stow` (sweep a session for durable knowledge before a context reset) comes from `firstmate`, and `axi` lives under `.agents/skills` inside its repo.
+A skill's name does not have to match its repo: `lavish` comes from `lavish-axi`, `stow` (sweep a session for durable knowledge before a context reset) comes from `firstmate`, `axi` lives under `.agents/skills` inside its repo, and `archify` keeps its package at `archify/` in its repo rather than under `skills/`.
+`archify` updates only through the fork sync, never `npx skills add` or `update`, which would write a real copy where the link belongs; `nix/home/common.nix` sets `ARCHIFY_UPDATE_CHECK_DISABLED=1` so the skill stops offering that update path.
 Skills owned by this repo rather than a tool fork live in `files/skills/`, and every directory there with a `SKILL.md` is linked and checked automatically, so adding one needs no list edit:
 
 - `ship` encodes the end-to-end quality loop below as an invocable skill.
@@ -434,11 +437,12 @@ Local verification (`git log --show-signature`) additionally needs the key liste
 mkdir -p ~/github ~/.local/bin ~/go/bin ~/.agents/skills ~/.claude/skills
 cd ~/github
 me=$(gh api user -q .login)
-for repo in axi chrome-devtools-axi firstmate gh-axi gnhf lavish-axi \
+for repo in archify axi chrome-devtools-axi firstmate gh-axi gnhf lavish-axi \
             no-mistakes quota-axi tasks-axi treehouse wheelhouse; do
   parent=kunchenguid
   case "$repo" in
     wheelhouse) parent=ImZoomBoy ;;
+    archify)    parent=tt-a1i ;;
   esac
   gh repo fork "$parent/$repo" --clone=false
   git clone "https://github.com/$me/$repo.git"
@@ -447,7 +451,7 @@ for repo in axi chrome-devtools-axi firstmate gh-axi gnhf lavish-axi \
 done
 ```
 
-wheelhouse forks from `ImZoomBoy/wheelhouse` because the original `kunchenguid/wheelhouse` repository was removed.
+wheelhouse forks from `ImZoomBoy/wheelhouse` because the original `kunchenguid/wheelhouse` repository was removed, and archify forks from its author, `tt-a1i/archify`.
 
 **Step 3: build the Go tools into `~/go/bin`.**
 
@@ -562,7 +566,7 @@ The checklist when adopting the next tool, so it inherits all five layers:
 2. Build and put it on `PATH`: `pnpm install --frozen-lockfile && pnpm run build && npm link` for Node tools, or `make build && install -m755 <bin> ~/go/bin/<bin>` for Go tools.
 3. Add its skill to `files/bin/ic-link` (both the canonical link and the `ALL_SKILLS` mirror list) and run `ic-link`.
 4. Add the repo to the fleet manifest (`~/github/.fleet/manifest.yaml`), with its default branch and install command, so the daily sync picks it up.
-5. Add it to the `FORKS`, `BINARIES`, and `SKILLS` lists in `files/bin/ic-doctor`.
+5. Add it to the `FORKS`, `BINARIES`, and `SKILLS` lists in `files/bin/ic-doctor`, and its skill to the matching `SKILLS` list in `tests/ic_doctor_test.sh`.
 6. Optionally add a short alias in `files/zsh/ic-workflow.zsh`.
 7. Run `syncforks-dry` and `ic-doctor` to confirm, then commit the dotfiles change.
 
@@ -635,7 +639,7 @@ The `ship` skill encodes the whole loop, so any agent in any tool can be told `/
 
 - Start the day with `quota-axi` to see how much agent headroom the session and week have left, and check the wheelhouse queue on GitHub for decisions other people are waiting on.
 - Pull the next piece of work with `tasks-axi ready`, and open an isolated worktree for it with `th` so streams of work never collide.
-- Do the work with agents that carry the axi skills: `gh-axi` for everything GitHub, `cda` for anything that needs a real browser, `lavish` when a plan or review is easier to judge as a rich artifact.
+- Do the work with agents that carry the axi skills: `gh-axi` for everything GitHub, `cda` for anything that needs a real browser, `lavish` when a plan or review is easier to judge as a rich artifact, `archify` when the answer is a diagram of a system, flow, schema, or timeline, or an explainer page someone asked for.
 - Ship through `nm` (no-mistakes), which runs review, tests, lint, docs, push, PR, and CI as one gate, so nothing reaches the remote unvalidated.
 - Before ending a long agent session, invoke the `stow` skill so preferences, project facts, and unfinished next steps land on disk instead of dying with the context window; when a stowed lesson keeps recurring, `learn-eval` turns it into a skill.
 - Before bed, hand the backlog to `gn` (gnhf) for a supervised overnight run, and read the results over coffee.

@@ -50,6 +50,11 @@ in
 
   home.sessionVariables = {
     EDITOR = "vim";
+    # The archify skill runs from its fork clone, which sync-forks keeps
+    # current, so its built-in reminder to update through npx skills would
+    # only invite a real copy over the ic-link symlink. This also stops its
+    # daily network check and reminder-state writes.
+    ARCHIFY_UPDATE_CHECK_DISABLED = "1";
   };
 
   # Keep user-local binaries (e.g. the Claude CLI), repo scripts, and Go tool
