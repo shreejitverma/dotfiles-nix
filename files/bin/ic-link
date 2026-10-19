@@ -61,7 +61,7 @@ REGULAR_SKILLS="chrome-devtools-axi gh-axi gnhf no-mistakes quota-axi tasks-axi"
 # Skills this repo owns: every files/skills/<name>/SKILL.md in this checkout.
 OWNED_SKILLS=$(ic_owned_skills "$SELF_REPO" | tr '\n' ' ')
 # All skills, for mirroring into per-tool skill directories.
-ALL_SKILLS="axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi stow tasks-axi $OWNED_SKILLS"
+ALL_SKILLS="archify axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi stow tasks-axi $OWNED_SKILLS"
 
 # ln -sfn replaces a symlink in place, but pointed at a real directory it would
 # create the link inside that directory instead. Skill directories can hold real
@@ -84,6 +84,8 @@ done
 link_skill "$GH_ROOT/lavish-axi/skills/lavish"  "$HOME/.agents/skills/lavish"
 link_skill "$GH_ROOT/firstmate/skills/stow"     "$HOME/.agents/skills/stow"
 link_skill "$GH_ROOT/axi/.agents/skills/axi"    "$HOME/.agents/skills/axi"
+# archify keeps its skill package one level down, in archify/, not skills/.
+link_skill "$GH_ROOT/archify/archify"          "$HOME/.agents/skills/archify"
 for s in $OWNED_SKILLS; do
   link_skill "$DOTFILES/files/skills/$s" "$HOME/.agents/skills/$s"
 done

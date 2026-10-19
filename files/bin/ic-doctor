@@ -40,10 +40,10 @@ export PATH
 GH_ROOT="$HOME/github"
 FLEET_DIR="$GH_ROOT/.fleet"
 MANIFEST="$FLEET_DIR/manifest.yaml"
-FORKS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi wheelhouse quota-axi"
+FORKS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi wheelhouse quota-axi archify"
 BINARIES="no-mistakes treehouse gnhf lavish-axi chrome-devtools-axi gh-axi tasks-axi quota-axi"
 # Skills from other repositories, plus every skill this checkout owns.
-SKILLS="axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi stow tasks-axi $(ic_owned_skills "$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)" | tr '\n' ' ')"
+SKILLS="archify axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi stow tasks-axi $(ic_owned_skills "$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)" | tr '\n' ' ')"
 
 fail=0
 ok()   { printf '  ok    %s\n' "$*"; }

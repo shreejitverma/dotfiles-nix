@@ -50,7 +50,7 @@ SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/ic-doctor-test.XXXXXX")"
 # The same set ic-doctor derives: skills from other repos plus files/skills.
 # shellcheck source=../setup/lib/skills.sh
 . "$REPO_ROOT/setup/lib/skills.sh"
-SKILLS="axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi stow tasks-axi $(ic_owned_skills "$REPO_ROOT" | tr '\n' ' ')"
+SKILLS="archify axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi stow tasks-axi $(ic_owned_skills "$REPO_ROOT" | tr '\n' ' ')"
 
 # shellcheck disable=SC2329  # invoked by the EXIT trap
 cleanup() {
