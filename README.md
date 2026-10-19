@@ -566,6 +566,7 @@ The checklist when adopting the next tool, so it inherits all five layers:
 2. Build and put it on `PATH`: `pnpm install --frozen-lockfile && pnpm run build && npm link` for Node tools, or `make build && install -m755 <bin> ~/go/bin/<bin>` for Go tools.
 3. Add its skill to `files/bin/ic-link` (both the canonical link and the `ALL_SKILLS` mirror list) and run `ic-link`.
 4. Add the repo to the fleet manifest (`~/github/.fleet/manifest.yaml`), with its default branch and install command, so the daily sync picks it up.
+   Follow "Add a repo to the fleet" in `~/github/.fleet/README.md` to the end: a `sync: true` fork must also be added to the `FLEET_SYNC_TOKEN` token's repository list, or every server-side run fails with HTTP 403.
 5. Add it to the `FORKS`, `BINARIES`, and `SKILLS` lists in `files/bin/ic-doctor`, and its skill to the matching `SKILLS` list in `tests/ic_doctor_test.sh`.
 6. Optionally add a short alias in `files/zsh/ic-workflow.zsh`.
 7. Run `syncforks-dry` and `ic-doctor` to confirm, then commit the dotfiles change.
