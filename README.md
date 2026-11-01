@@ -240,6 +240,7 @@ This section documents how it is wired on my system today, and then gives the ex
 | [dotfiles-nix](https://github.com/shreejitverma/dotfiles-nix) | This repo: nix-darwin + Home Manager + Homebrew base system | `rebuild` alias |
 | [axi](https://github.com/kunchenguid/axi) | The 10 AXI principles for agent-ergonomic CLIs, plus the SDK and skill | skill only |
 | [gh-axi](https://github.com/kunchenguid/gh-axi) | GitHub (issues, PRs, CI, releases, Projects) through an agent-ergonomic CLI | `gh-axi` |
+| x-axi (private tool, `~/github/x-axi`) | Read X data and manage your X account, with a native approval dialog on every write | `x-axi` |
 | [tasks-axi](https://github.com/kunchenguid/tasks-axi) | Task and backlog manager for the current workspace, agent-driven | `tasks-axi` |
 | [chrome-devtools-axi](https://github.com/kunchenguid/chrome-devtools-axi) | Real Chrome control for agents: navigate, click, inspect, screenshot, audit | `chrome-devtools-axi` |
 | [lavish-axi](https://github.com/kunchenguid/lavish-axi) | Rich annotatable HTML artifacts from agent output, with a feedback loop | `lavish-axi` |
@@ -277,6 +278,7 @@ Go tools are built with `make` and installed to `~/go/bin` (`$(go env GOPATH)/bi
 Node tools are built with `pnpm` and put on `PATH` with `npm link`, so the linked binary in `/opt/homebrew/bin` always runs the current build of the clone:
 
 - `chrome-devtools-axi`, `gh-axi`, `gnhf`, `lavish-axi`, `quota-axi`, `tasks-axi`
+- `x-axi` from `~/github/x-axi`, which is not a fork and needs `xurl` first: `go install github.com/xdevplatform/xurl@v1.3.4`
 
 `firstmate` is pure shell and is entered through the `firstmate` function in `files/zsh/ic-workflow.zsh`.
 `axi` ships no daily-use binary; it contributes its skill and SDK source.
