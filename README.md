@@ -240,6 +240,7 @@ This section documents how it is wired on my system today, and then gives the ex
 | [dotfiles-nix](https://github.com/shreejitverma/dotfiles-nix) | This repo: nix-darwin + Home Manager + Homebrew base system | `rebuild` alias |
 | [axi](https://github.com/kunchenguid/axi) | The 10 AXI principles for agent-ergonomic CLIs, plus the SDK and skill | skill only |
 | [gh-axi](https://github.com/kunchenguid/gh-axi) | GitHub (issues, PRs, CI, releases, Projects) through an agent-ergonomic CLI | `gh-axi` |
+| [x-axi](https://github.com/shreejitverma/x-axi) | Read X data and manage your X account, with a native approval dialog on every write and the login in the OS keystore | `x-axi` |
 | [tasks-axi](https://github.com/kunchenguid/tasks-axi) | Task and backlog manager for the current workspace, agent-driven | `tasks-axi` |
 | [chrome-devtools-axi](https://github.com/kunchenguid/chrome-devtools-axi) | Real Chrome control for agents: navigate, click, inspect, screenshot, audit | `chrome-devtools-axi` |
 | [lavish-axi](https://github.com/kunchenguid/lavish-axi) | Rich annotatable HTML artifacts from agent output, with a feedback loop | `lavish-axi` |
@@ -277,6 +278,7 @@ Go tools are built with `make` and installed to `~/go/bin` (`$(go env GOPATH)/bi
 Node tools are built with `pnpm` and put on `PATH` with `npm link`, so the linked binary in `/opt/homebrew/bin` always runs the current build of the clone:
 
 - `chrome-devtools-axi`, `gh-axi`, `gnhf`, `lavish-axi`, `quota-axi`, `tasks-axi`
+- `x-axi` from `~/github/x-axi`, which is not a fork; sign in once with `x-axi login` in your own terminal, as `x-axi setup` describes
 
 `firstmate` is pure shell and is entered through the `firstmate` function in `files/zsh/ic-workflow.zsh`.
 `axi` ships no daily-use binary; it contributes its skill and SDK source.
@@ -376,7 +378,7 @@ This is the full map; if something is installed and not listed here, it is unman
 | npm globals | `npm install -g` | `pnpm` (build tool for all Node forks) |
 | Native installers | vendor scripts | `claude` (Claude Code, `curl -fsSL https://claude.ai/install.sh \| bash`); `grok` (xAI Grok Build, `curl -fsSL https://x.ai/cli/install.sh \| bash`, binary at `~/.local/bin/grok`) |
 | Go builds | `sync-forks` / manual | `no-mistakes`, `treehouse` into `~/go/bin` |
-| npm links | `sync-forks` / manual | `chrome-devtools-axi`, `gh-axi`, `gnhf`, `lavish-axi`, `quota-axi`, `tasks-axi` |
+| npm links | `sync-forks` / manual | `chrome-devtools-axi`, `gh-axi`, `gnhf`, `lavish-axi`, `quota-axi`, `tasks-axi` via `sync-forks`; `x-axi` manual (not in the fleet manifest) |
 | Skills installer | `npx skills` | third-party skills: `deploy-to-vercel`, `find-skills`, `vercel-*`, `web-design-guidelines`, `writing-guidelines` |
 | Symlink farm | `ic-link` | all skill, instruction-chain, and personal-layer links |
 
@@ -449,9 +451,11 @@ for repo in archify axi chrome-devtools-axi firstmate gh-axi gnhf lavish-axi \
   git -C "$repo" remote add upstream "https://github.com/$parent/$repo.git"
   git -C "$repo" fetch upstream
 done
+git clone https://github.com/shreejitverma/x-axi.git
 ```
 
 wheelhouse forks from `ImZoomBoy/wheelhouse` because the original `kunchenguid/wheelhouse` repository was removed, and archify forks from its author, `tt-a1i/archify`.
+x-axi is not a fork, so it is a plain clone with no upstream remote, and `sync-forks` does not update it.
 
 **Step 3: build the Go tools into `~/go/bin`.**
 
@@ -465,7 +469,7 @@ treehouse gets an explicit `install` because its upstream `make install` reads t
 **Step 4: build and link the Node tools.**
 
 ```bash
-for repo in chrome-devtools-axi gh-axi gnhf lavish-axi quota-axi tasks-axi; do
+for repo in chrome-devtools-axi gh-axi gnhf lavish-axi quota-axi tasks-axi x-axi; do
   cd ~/github/$repo
   pnpm install --frozen-lockfile
   pnpm run build
@@ -507,6 +511,14 @@ quota-axi needs macOS Keychain access once to read live Claude quota (click "Alw
 
 ```bash
 quota-axi --allow-keychain-prompt auth
+```
+
+x-axi needs one sign-in to X, run in your own terminal and never through an agent, because it opens a browser for OAuth and stores the token in the OS keystore.
+`x-axi setup` prints the X developer app steps and the Callback URI to register; the first login takes that app's OAuth 2.0 Client ID, which it saves for later runs:
+
+```bash
+x-axi setup
+x-axi login --client-id YOUR_CLIENT_ID
 ```
 
 Gemini needs `AGENTS.md` added to `context.fileName` in `~/.gemini/settings.json` by hand, once; `ic-link` deliberately never writes that file (cross-tool layer above), and `ic-doctor` FAILs until the entry is there.

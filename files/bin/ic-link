@@ -57,11 +57,11 @@ if [ ! -d "$DOTFILES" ]; then
 fi
 
 # Skills whose directory name matches their repo name.
-REGULAR_SKILLS="chrome-devtools-axi gh-axi gnhf no-mistakes quota-axi tasks-axi"
+REGULAR_SKILLS="chrome-devtools-axi gh-axi gnhf no-mistakes quota-axi tasks-axi x-axi"
 # Skills this repo owns: every files/skills/<name>/SKILL.md in this checkout.
 OWNED_SKILLS=$(ic_owned_skills "$SELF_REPO" | tr '\n' ' ')
 # All skills, for mirroring into per-tool skill directories.
-ALL_SKILLS="archify axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi stow tasks-axi $OWNED_SKILLS"
+ALL_SKILLS="archify axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi stow tasks-axi x-axi $OWNED_SKILLS"
 
 # ln -sfn replaces a symlink in place, but pointed at a real directory it would
 # create the link inside that directory instead. Skill directories can hold real
