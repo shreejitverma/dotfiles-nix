@@ -378,7 +378,7 @@ This is the full map; if something is installed and not listed here, it is unman
 | npm globals | `npm install -g` | `pnpm` (build tool for all Node forks) |
 | Native installers | vendor scripts | `claude` (Claude Code, `curl -fsSL https://claude.ai/install.sh \| bash`); `grok` (xAI Grok Build, `curl -fsSL https://x.ai/cli/install.sh \| bash`, binary at `~/.local/bin/grok`) |
 | Go builds | `sync-forks` / manual | `no-mistakes`, `treehouse` into `~/go/bin` |
-| npm links | `sync-forks` / manual | `chrome-devtools-axi`, `gh-axi`, `gnhf`, `lavish-axi`, `quota-axi`, `tasks-axi` |
+| npm links | `sync-forks` / manual | `chrome-devtools-axi`, `gh-axi`, `gnhf`, `lavish-axi`, `quota-axi`, `tasks-axi` via `sync-forks`; `x-axi` manual (not in the fleet manifest) |
 | Skills installer | `npx skills` | third-party skills: `deploy-to-vercel`, `find-skills`, `vercel-*`, `web-design-guidelines`, `writing-guidelines` |
 | Symlink farm | `ic-link` | all skill, instruction-chain, and personal-layer links |
 
@@ -451,9 +451,11 @@ for repo in archify axi chrome-devtools-axi firstmate gh-axi gnhf lavish-axi \
   git -C "$repo" remote add upstream "https://github.com/$parent/$repo.git"
   git -C "$repo" fetch upstream
 done
+git clone https://github.com/shreejitverma/x-axi.git
 ```
 
 wheelhouse forks from `ImZoomBoy/wheelhouse` because the original `kunchenguid/wheelhouse` repository was removed, and archify forks from its author, `tt-a1i/archify`.
+x-axi is not a fork, so it is a plain clone with no upstream remote, and `sync-forks` does not update it.
 
 **Step 3: build the Go tools into `~/go/bin`.**
 
@@ -467,7 +469,7 @@ treehouse gets an explicit `install` because its upstream `make install` reads t
 **Step 4: build and link the Node tools.**
 
 ```bash
-for repo in chrome-devtools-axi gh-axi gnhf lavish-axi quota-axi tasks-axi; do
+for repo in chrome-devtools-axi gh-axi gnhf lavish-axi quota-axi tasks-axi x-axi; do
   cd ~/github/$repo
   pnpm install --frozen-lockfile
   pnpm run build
@@ -509,6 +511,14 @@ quota-axi needs macOS Keychain access once to read live Claude quota (click "Alw
 
 ```bash
 quota-axi --allow-keychain-prompt auth
+```
+
+x-axi needs one sign-in to X, run in your own terminal and never through an agent, because it opens a browser for OAuth and stores the token in the OS keystore.
+`x-axi setup` prints the X developer app steps and the Callback URI to register; the first login takes that app's OAuth 2.0 Client ID, which it saves for later runs:
+
+```bash
+x-axi setup
+x-axi login --client-id YOUR_CLIENT_ID
 ```
 
 Gemini needs `AGENTS.md` added to `context.fileName` in `~/.gemini/settings.json` by hand, once; `ic-link` deliberately never writes that file (cross-tool layer above), and `ic-doctor` FAILs until the entry is there.
