@@ -102,7 +102,9 @@ runner-up borrow --pool <tart-pool> --label "<why>" --minutes 30 -- sh -c '
 1. `runner-up status`: is the job waiting, and why (no free place, waiting for room, machine resting, place drained)?
 2. A resting machine means its agent could not be reached over SSH; check `ssh -o BatchMode=yes <user>@<machine> true` and say what failed, rather than editing the setup.
 3. `runner-up check-config`: a pool size that never fits, or places on no pool, is refused here with the reason.
-4. Order across repositories and pools is exact; within one pool of one repository GitHub picks which job a runner takes, so order there is only close.
+4. A job that stays queued while `status` shows its place busy "waiting for its job", and the coordinator log repeats "no job reached the runner in time", means the runner inside the place never reached GitHub.
+   For a tart place, read `~/actions-runner/_diag/Runner_*.log` in the live clone (`tart exec runner-up-<place> ...`); `Socket Error: HostNotFound` is guest DNS, which a host VPN such as Cloudflare WARP breaks, and the fix is the baked image (`~/github/.fleet/bin/bake-runner-up-image.sh`), not a setup or workflow change.
+5. Order across repositories and pools is exact; within one pool of one repository GitHub picks which job a runner takes, so order there is only close.
 
 ## 6. Invariants never to break
 
