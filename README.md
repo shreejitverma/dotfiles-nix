@@ -251,7 +251,7 @@ This section documents how it is wired on my system today, and then gives the ex
 | [gnhf](https://github.com/kunchenguid/gnhf) | "Good night, have fun": supervised overnight agent coding runs | `gnhf` |
 | [wheelhouse](https://github.com/ImZoomBoy/wheelhouse) | Cross-repo "what needs my decision" queue on GitHub Issues + Actions | runs on GitHub |
 | [archify](https://github.com/tt-a1i/archify) | Validated, browser-checked interactive HTML diagrams and one-page explainers from a description, Mermaid, or a traced repository | skill only |
-| [runner-up](https://github.com/kunchenguid/runner-up) | Self-hosted GitHub Actions runners on your own machines, one fresh place per job; installed with no coordinator or setup on this machine | `runner-up` |
+| [runner-up](https://github.com/kunchenguid/runner-up) | Self-hosted GitHub Actions runners on your own machines, one fresh place per job; this Mac's coordinator runs cryozen's Apple-silicon macOS CI in fresh tart clones | `runner-up` |
 
 ### How it is integrated on this machine
 
@@ -275,7 +275,7 @@ Go tools are built with `make` and installed to `~/go/bin` (`$(go env GOPATH)/bi
 
 - `no-mistakes` from `~/github/no-mistakes` (`make install`, which also restarts its daemon)
 - `treehouse` from `~/github/treehouse` (`make build` plus an explicit `install` into `~/go/bin`; the exact command lives in the fleet manifest)
-- `runner-up` from `~/github/runner-up` (the same `make build` plus `install`, with `VERSION` from `git describe` so `runner-up version` names the synced commit)
+- `runner-up` from `~/github/runner-up` (the same `make build` plus `install`, with `VERSION` from `git describe` so `runner-up version` names the synced commit, through the fleet's `bin/install-runner-up.sh`, which also restarts a running coordinator onto the new build)
 
 Node tools are built with `pnpm` and put on `PATH` with `npm link`, so the linked binary in `/opt/homebrew/bin` always runs the current build of the clone:
 
@@ -312,6 +312,7 @@ The eleven other than `ship` and `runner-up` are adapted from [ECC](https://gith
 It never merges: a fork with local commits is reported as diverged (or ahead) and left untouched, locally and on GitHub.
 When a fast-forward actually updated a repo, it pushes the fork and re-runs that repo's install command from the manifest.
 A launchd agent defined in `nix/home/darwin.nix` runs it daily at 10:00 on macOS, with `RunAtLoad` catching runs missed while the machine was off; `nix/home/linux.nix` schedules the same run as a systemd user timer, and `nix/home/wsl.nix` ships that timer disabled.
+`nix/home/darwin.nix` also defines the runner-up coordinator agent (`org.nix-community.home.runner-up`), which runs `~/go/bin/runner-up serve` only while its setup file exists, so a Mac without a runner-up setup runs nothing; what this Mac's setup serves, and how to send those jobs back to hosted runners, is in the fleet manifest's `runner-up` notes.
 Logs land in `~/github/.fleet/logs/` with 30-day rotation, and a desktop notification fires only when something needs a human: a failure, a diverged fork, or a `sync: false` fork behind upstream.
 `syncforks` and `syncforks-dry` run it by hand.
 
@@ -381,7 +382,7 @@ This is the full map; if something is installed and not listed here, it is unman
 | User programs | `nix/home/common.nix` `programs.*` | `git`+`delta`, `starship`, `bat`, `fzf`, `zoxide`, `atuin`, `direnv`, `zsh`, `eza` |
 | C++ lint tools | `nix/home/darwin.nix` `home.file` | links to Homebrew LLVM's `clang-format`, `clang-tidy`, `run-clang-tidy`, `clang-apply-replacements`, `git-clang-format` in `~/.local/share/ic/llvm-tools`, on `PATH` without shadowing Apple `clang` |
 | Desktop layer | `nix/home/desktop.nix` | fonts (Hack Nerd Font, Roboto, Noto, Font Awesome) and the linked WezTerm and herdr configs |
-| Manual Homebrew | `brew` (not yet declared in nix) | formulas `node`, `go`, `gh`, `gemini-cli`; casks `google-chrome` (required by chrome-devtools-axi), `codex` |
+| Manual Homebrew | `brew` (not yet declared in nix) | formulas `node`, `go`, `gh`, `gemini-cli`, `openai/tools/tart` (runner-up's macOS VM places; `cirruslabs/tart` moved to `openai/tart`, and the old `cirruslabs/cli` tap is stale); casks `google-chrome` (required by chrome-devtools-axi), `codex` |
 | npm globals | `npm install -g` | `pnpm` (build tool for all Node forks) |
 | Native installers | vendor scripts | `claude` (Claude Code, `curl -fsSL https://claude.ai/install.sh \| bash`); `grok` (xAI Grok Build, `curl -fsSL https://x.ai/cli/install.sh \| bash`, binary at `~/.local/bin/grok`) |
 | Go builds | `sync-forks` / manual | `no-mistakes`, `treehouse`, `runner-up` into `~/go/bin` |
