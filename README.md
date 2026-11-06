@@ -274,6 +274,7 @@ Go tools are built with `make` and installed to `~/go/bin` (`$(go env GOPATH)/bi
 
 - `no-mistakes` from `~/github/no-mistakes` (`make install`, which also restarts its daemon)
 - `treehouse` from `~/github/treehouse` (`make build` plus an explicit `install` into `~/go/bin`; the exact command lives in the fleet manifest)
+- `runner-up` from `~/github/runner-up` (the same `make build` plus `install`, with `VERSION` from `git describe` so `runner-up version` names the synced commit)
 
 Node tools are built with `pnpm` and put on `PATH` with `npm link`, so the linked binary in `/opt/homebrew/bin` always runs the current build of the clone:
 
@@ -301,8 +302,9 @@ Skills owned by this repo rather than a tool fork live in `files/skills/`, and e
 - `cpp-coding-standards`, `cpp-testing`, `python-testing`, `perf-loop`, `silent-failure-hunt`, and `search-first` cover C++ and Python engineering, including hot-path rules and measured optimization.
 - `mle-workflow`, `data-backfill`, and `decision-ledger` cover research, ML, and data pipelines: point-in-time correctness, provable backfills, and experiment ledgers that survive selection bias.
 - `loop-design-check` reviews autonomous agent loops (overnight `gnhf` runs, green-keepers) before they run unattended, and `learn-eval` promotes a recurring lesson into a new skill behind a quality gate, complementing `stow`, which saves notes but never writes skills.
+- `runner-up` teaches agents to read the self-hosted GitHub Actions runner coordinator (status, usage, check-config), write `runs-on` lines for its pools, size pools from readings, and borrow a fresh macOS VM, and to report plainly when no setup exists instead of creating one unasked.
 
-Those eleven are adapted from [ECC](https://github.com/affaan-m/ecc) under the MIT License; `files/skills/THIRD_PARTY_NOTICES.md` maps each to its source.
+The eleven other than `ship` and `runner-up` are adapted from [ECC](https://github.com/affaan-m/ecc) under the MIT License; `files/skills/THIRD_PARTY_NOTICES.md` maps each to its source.
 
 **4. Daily sync.**
 `files/bin/sync-forks` reads the fleet manifest (`~/github/.fleet/manifest.yaml`, the single source of truth for the repo list, maintained outside this repo), re-asserts commit identity, and fast-forwards each `sync: true` fork's default branch from upstream; `sync: false` forks are only fetched and measured.

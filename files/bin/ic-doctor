@@ -40,7 +40,7 @@ export PATH
 GH_ROOT="$HOME/github"
 FLEET_DIR="$GH_ROOT/.fleet"
 MANIFEST="$FLEET_DIR/manifest.yaml"
-FORKS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi wheelhouse quota-axi archify"
+FORKS="no-mistakes treehouse firstmate gnhf lavish-axi axi chrome-devtools-axi gh-axi tasks-axi wheelhouse quota-axi archify runner-up"
 BINARIES="no-mistakes treehouse gnhf lavish-axi chrome-devtools-axi gh-axi tasks-axi quota-axi x-axi"
 # Skills from other repositories, plus every skill this checkout owns.
 SKILLS="archify axi chrome-devtools-axi gh-axi gnhf lavish no-mistakes quota-axi stow tasks-axi x-axi $(ic_owned_skills "$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd ../.. && pwd)" | tr '\n' ' ')"
