@@ -15,6 +15,9 @@
 #     rewrites that file) or ~/.gemini/GEMINI.md (Gemini's own memory file)
 #   - link Grok's own AGENTS.md, skills, and agent definitions, and Gemini's
 #     own manual, from ~/github/agents when that repo is present
+#   - link Muse's own manual as its native $XDG_CONFIG_HOME/muse/AGENTS.md only
+#     when Muse has created that directory, never touch auth.json there, and
+#     never replace a hand-written AGENTS.md
 #   - link every files/skills/<name> this repo owns into the declared
 #     dotfilesDir, and never write a link inside a real skill directory
 #   - link Claude subagents and rules from ~/github/agents one file at a time,
@@ -28,6 +31,9 @@ set -uo pipefail
 
 REPO_ROOT="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd .. && pwd)"
 SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/ic-link-test.XXXXXX")"
+# ic-link resolves Muse's config directory through XDG_CONFIG_HOME, so an
+# inherited value would point the sandboxed run at the real one.
+unset XDG_CONFIG_HOME
 # shellcheck source=../setup/lib/skills.sh
 . "$REPO_ROOT/setup/lib/skills.sh"
 
@@ -68,6 +74,7 @@ seed_agents_repo() {
   printf '%s\n' '# Claude operating manual' >"$repo/CLAUDE.md"
   printf '%s\n' '# Tool-neutral manual' >"$repo/AGENTS.md"
   printf '%s\n' '# Gemini operating manual' >"$repo/GEMINI.md"
+  printf '%s\n' '# Muse operating manual' >"$repo/MUSE.md"
   printf '%s\n' '# Grok operating manual' '## Default development system' >"$repo/GROK.md"
   printf '%s\n' 'opinions' >"$repo/OPINIONS.md"
   printf '%s\n' 'voice' >"$repo/VOICE.md"
@@ -194,6 +201,66 @@ mkdir -p "$home/.gemini"
 run_link "$home"
 assert_no_path "$home/.gemini/AGENTS.md" \
   "no Gemini manual means no \$HOME/.gemini/AGENTS.md link at all"
+
+# --- Muse: linked only into a config directory Muse already made ---
+home=$(new_home muse-absent)
+seed_agents_repo "$home"
+run_link "$home"
+assert_no_path "$home/.config/muse" "ic-link does not create ~/.config/muse when Muse has not"
+
+home=$(new_home muse-present)
+seed_agents_repo "$home"
+mkdir -p "$home/.config/muse"
+printf '%s\n' '{"meta":"credential"}' >"$home/.config/muse/auth.json"
+run_link "$home"
+assert_eq "$(readlink "$home/.config/muse/AGENTS.md")" "$home/github/agents/MUSE.md" \
+  "~/.config/muse/AGENTS.md points at Muse's own manual"
+assert_eq "$(cat "$home/.config/muse/auth.json")" '{"meta":"credential"}' \
+  "Muse's credential file is left untouched"
+run_link "$home"
+assert_eq "$(readlink "$home/.config/muse/AGENTS.md")" "$home/github/agents/MUSE.md" \
+  "rerunning ic-link keeps the Muse link in place"
+
+home=$(new_home muse-xdg)
+seed_agents_repo "$home"
+mkdir -p "$home/xdg/muse"
+if XDG_CONFIG_HOME="$home/xdg" HOME="$home" "$REPO_ROOT/files/bin/ic-link" >/dev/null; then
+  ok "ic-link exits 0 with a custom XDG_CONFIG_HOME"
+else
+  fail "ic-link exited non-zero with a custom XDG_CONFIG_HOME"
+fi
+assert_eq "$(readlink "$home/xdg/muse/AGENTS.md")" "$home/github/agents/MUSE.md" \
+  "the Muse manual follows XDG_CONFIG_HOME, as Muse does"
+assert_no_path "$home/.config/muse" "a custom XDG_CONFIG_HOME leaves ~/.config/muse alone"
+
+home=$(new_home muse-hand-written)
+seed_agents_repo "$home"
+mkdir -p "$home/.config/muse"
+printf '%s\n' '# my own muse rules' >"$home/.config/muse/AGENTS.md"
+out=$(HOME="$home" "$REPO_ROOT/files/bin/ic-link" 2>&1)
+assert_eq "$(readlink "$home/.config/muse/AGENTS.md" 2>/dev/null || echo not-a-symlink)" "not-a-symlink" \
+  "a hand-written Muse AGENTS.md is not replaced with a link"
+assert_eq "$(cat "$home/.config/muse/AGENTS.md")" "# my own muse rules" \
+  "a hand-written Muse AGENTS.md keeps its content"
+if grep -q "muse/AGENTS.md is a real file" <<<"$out"; then
+  ok "warns when Muse's AGENTS.md is a hand-written file"
+else
+  fail "should warn when Muse's AGENTS.md is a hand-written file"
+fi
+
+# --- missing MUSE.md must not fall back to another tool's manual ---
+home=$(new_home muse-no-manual)
+seed_agents_repo "$home"
+rm -f "$home/github/agents/MUSE.md"
+mkdir -p "$home/.config/muse"
+out=$(HOME="$home" "$REPO_ROOT/files/bin/ic-link" 2>&1)
+assert_no_path "$home/.config/muse/AGENTS.md" \
+  "no Muse manual means no Muse AGENTS.md link at all"
+if grep -q "MUSE.md missing" <<<"$out"; then
+  ok "warns when MUSE.md is missing"
+else
+  fail "should warn when MUSE.md is missing"
+fi
 
 # --- missing GROK.md must not fall back to Claude ---
 home=$(new_home grok-no-manual)
