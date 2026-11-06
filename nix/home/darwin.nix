@@ -1,7 +1,8 @@
 { config, lib, ... }:
 
-# macOS-only Home Manager layer: the launchd agent, the macOS home directory,
-# and the `rebuild` alias that drives nix-darwin.
+# macOS-only Home Manager layer: the launchd agents (sync-forks and the
+# runner-up coordinator), the macOS home directory, and the `rebuild` alias that
+# drives nix-darwin.
 #
 # On macOS this repo owns the whole machine through nix-darwin, so `rebuild`
 # activates a system generation. The Linux and WSL profiles have no equivalent
@@ -92,6 +93,34 @@ in
       # hung ~17 minutes before failing. The sync does real builds; it needs
       # normal QoS.
       ProcessType = "Standard";
+    };
+  };
+
+  # runner-up coordinator: self-hosted GitHub Actions runners for the
+  # repositories its setup file serves, one fresh tart clone per job on this
+  # Mac (see the runner-up entry in ~/github/.fleet/manifest.yaml and the
+  # runner-up skill). The setup file is the switch: launchd starts and keeps
+  # the coordinator alive only while it exists, so a Mac without a setup runs
+  # nothing and does not respawn a coordinator that exits for want of one.
+  # It runs the fleet build in ~/go/bin; the setup names no `release`, so the
+  # coordinator never replaces that build with a downloaded one, and the
+  # fleet's install script restarts this agent after each rebuild.
+  # AbandonProcessGroup keeps running jobs' place runners alive through a
+  # coordinator stop or restart, as upstream's README requires.
+  # Standard, not Background, for the same throttling reason as sync-forks.
+  launchd.agents.runner-up = {
+    enable = true;
+    config = {
+      ProgramArguments = [ "${config.home.homeDirectory}/go/bin/runner-up" "serve" ];
+      EnvironmentVariables.PATH =
+        "${config.home.homeDirectory}/go/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin";
+      KeepAlive.PathState = {
+        "${config.home.homeDirectory}/Library/Application Support/runner-up/config.json" = true;
+      };
+      AbandonProcessGroup = true;
+      ProcessType = "Standard";
+      StandardOutPath = "${config.home.homeDirectory}/Library/Logs/runner-up.log";
+      StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/runner-up.log";
     };
   };
 }

@@ -17,9 +17,21 @@ The upstream README is the authoritative reference: read the section you need in
 runner-up status        # places, running reservations, resting machines, waiting work, borrows, drains
 ```
 
-`status` exits 2 with `no setup file at <path>` when no coordinator has been set up.
-That is the expected state on this Mac today: report it plainly as "runner-up is installed but no setup exists, so no self-hosted runners serve any repository", and stop there unless the user asks to set one up.
-Never infer that a repository's jobs run self-hosted from the binary being present; only a setup listing that repository, plus a running `runner-up serve`, makes that true.
+`status` exits 2 with `no setup file at <path>` when no coordinator has been set up on this machine.
+Report that plainly as "runner-up is installed but no setup exists here, so this machine serves no self-hosted runners", and stop there unless the user asks to set one up.
+Never infer that a repository's jobs run self-hosted from the binary being present; only a setup listing that repository, plus a running coordinator, makes that true.
+What a machine's setup serves, and why, is recorded in the `runner-up` entry's `notes` in `~/github/.fleet/manifest.yaml`; read it before reasoning about which repositories or jobs runner-up carries.
+
+On a Mac managed by dotfiles-nix the coordinator is the launchd agent `org.nix-community.home.runner-up`, which runs `~/go/bin/runner-up serve` only while the setup file exists:
+
+```sh
+launchctl print gui/$(id -u)/org.nix-community.home.runner-up | grep -E 'state|pid'   # running or not
+tail -n 50 ~/Library/Logs/runner-up.log                                               # coordinator log
+~/github/.fleet/bin/install-runner-up.sh --check                                      # build, setup and coordinator health
+```
+
+Never start a second coordinator by hand while that agent runs; a second coordinator for the same pool only waits for the first.
+A repository can route jobs to a pool through a repository variable rather than a hard-coded label (cryozen uses `CRYOZEN_MACOS_RUNNER`); deleting that variable sends those jobs back to hosted runners, which is the switch to suggest when the coordinator's machine will be asleep or away, not editing the setup or the workflow.
 The setup file defaults to `~/Library/Application Support/runner-up/config.json` on macOS and `~/.config/runner-up/config.json` on Linux; `--config FILE` names another, and every command but `agent`, `fork-guard`, `setup`, `service` and `version` takes it.
 
 ## 1. Commands by risk
@@ -90,7 +102,9 @@ runner-up borrow --pool <tart-pool> --label "<why>" --minutes 30 -- sh -c '
 1. `runner-up status`: is the job waiting, and why (no free place, waiting for room, machine resting, place drained)?
 2. A resting machine means its agent could not be reached over SSH; check `ssh -o BatchMode=yes <user>@<machine> true` and say what failed, rather than editing the setup.
 3. `runner-up check-config`: a pool size that never fits, or places on no pool, is refused here with the reason.
-4. Order across repositories and pools is exact; within one pool of one repository GitHub picks which job a runner takes, so order there is only close.
+4. A job that stays queued while `status` shows its place busy "waiting for its job", and the coordinator log repeats "no job reached the runner in time", means the runner inside the place never reached GitHub.
+   For a tart place, read `~/actions-runner/_diag/Runner_*.log` in the live clone (`tart exec runner-up-<place> ...`); `Socket Error: HostNotFound` is guest DNS, which a host VPN such as Cloudflare WARP breaks, and the fix is the baked image (`~/github/.fleet/bin/bake-runner-up-image.sh`), not a setup or workflow change.
+5. Order across repositories and pools is exact; within one pool of one repository GitHub picks which job a runner takes, so order there is only close.
 
 ## 6. Invariants never to break
 
