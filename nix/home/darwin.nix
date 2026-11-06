@@ -1,7 +1,8 @@
 { config, lib, ... }:
 
-# macOS-only Home Manager layer: the launchd agent, the macOS home directory,
-# and the `rebuild` alias that drives nix-darwin.
+# macOS-only Home Manager layer: the launchd agents (sync-forks and the
+# runner-up coordinator), the macOS home directory, and the `rebuild` alias that
+# drives nix-darwin.
 #
 # On macOS this repo owns the whole machine through nix-darwin, so `rebuild`
 # activates a system generation. The Linux and WSL profiles have no equivalent

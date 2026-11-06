@@ -312,9 +312,9 @@ The eleven other than `ship` and `runner-up` are adapted from [ECC](https://gith
 It never merges: a fork with local commits is reported as diverged (or ahead) and left untouched, locally and on GitHub.
 When a fast-forward actually updated a repo, it pushes the fork and re-runs that repo's install command from the manifest.
 A launchd agent defined in `nix/home/darwin.nix` runs it daily at 10:00 on macOS, with `RunAtLoad` catching runs missed while the machine was off; `nix/home/linux.nix` schedules the same run as a systemd user timer, and `nix/home/wsl.nix` ships that timer disabled.
-`nix/home/darwin.nix` also defines the runner-up coordinator agent (`org.nix-community.home.runner-up`), which runs `~/go/bin/runner-up serve` only while its setup file exists, so a Mac without a runner-up setup runs nothing; what this Mac's setup serves, and how to send those jobs back to hosted runners, is in the fleet manifest's `runner-up` notes.
 Logs land in `~/github/.fleet/logs/` with 30-day rotation, and a desktop notification fires only when something needs a human: a failure, a diverged fork, or a `sync: false` fork behind upstream.
 `syncforks` and `syncforks-dry` run it by hand.
+`nix/home/darwin.nix` also defines the runner-up coordinator agent (`org.nix-community.home.runner-up`), which runs `~/go/bin/runner-up serve` only while its setup file exists, so a Mac without a runner-up setup runs nothing; it logs to `~/Library/Logs/runner-up.log`, and what this Mac's setup serves, and how to send those jobs back to hosted runners, is in the fleet manifest's `runner-up` notes.
 
 **5. Shell ergonomics.**
 `files/zsh/ic-workflow.zsh` wires the tools into the shell: `th` (treehouse), `nm` (no-mistakes), `gn` (gnhf), `cda` (chrome-devtools-axi), `ta` (tasks-axi), `qa` (quota-axi), `fm` (firstmate), `syncforks`, and `icdoctor`.
