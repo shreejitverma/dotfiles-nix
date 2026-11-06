@@ -251,6 +251,7 @@ This section documents how it is wired on my system today, and then gives the ex
 | [gnhf](https://github.com/kunchenguid/gnhf) | "Good night, have fun": supervised overnight agent coding runs | `gnhf` |
 | [wheelhouse](https://github.com/ImZoomBoy/wheelhouse) | Cross-repo "what needs my decision" queue on GitHub Issues + Actions | runs on GitHub |
 | [archify](https://github.com/tt-a1i/archify) | Validated, browser-checked interactive HTML diagrams and one-page explainers from a description, Mermaid, or a traced repository | skill only |
+| [runner-up](https://github.com/kunchenguid/runner-up) | Self-hosted GitHub Actions runners on your own machines, one fresh place per job; installed with no coordinator or setup on this machine | `runner-up` |
 
 ### How it is integrated on this machine
 
@@ -379,7 +380,7 @@ This is the full map; if something is installed and not listed here, it is unman
 | Manual Homebrew | `brew` (not yet declared in nix) | formulas `node`, `go`, `gh`, `gemini-cli`; casks `google-chrome` (required by chrome-devtools-axi), `codex` |
 | npm globals | `npm install -g` | `pnpm` (build tool for all Node forks) |
 | Native installers | vendor scripts | `claude` (Claude Code, `curl -fsSL https://claude.ai/install.sh \| bash`); `grok` (xAI Grok Build, `curl -fsSL https://x.ai/cli/install.sh \| bash`, binary at `~/.local/bin/grok`) |
-| Go builds | `sync-forks` / manual | `no-mistakes`, `treehouse` into `~/go/bin` |
+| Go builds | `sync-forks` / manual | `no-mistakes`, `treehouse`, `runner-up` into `~/go/bin` |
 | npm links | `sync-forks` / manual | `chrome-devtools-axi`, `gh-axi`, `gnhf`, `lavish-axi`, `quota-axi`, `tasks-axi` via `sync-forks`; `x-axi` manual (not in the fleet manifest) |
 | Skills installer | `npx skills` | third-party skills: `deploy-to-vercel`, `find-skills`, `vercel-*`, `web-design-guidelines`, `writing-guidelines` |
 | Symlink farm | `ic-link` | all skill, instruction-chain, and personal-layer links |
@@ -442,7 +443,7 @@ mkdir -p ~/github ~/.local/bin ~/go/bin ~/.agents/skills ~/.claude/skills
 cd ~/github
 me=$(gh api user -q .login)
 for repo in archify axi chrome-devtools-axi firstmate gh-axi gnhf lavish-axi \
-            no-mistakes quota-axi tasks-axi treehouse wheelhouse; do
+            no-mistakes quota-axi runner-up tasks-axi treehouse wheelhouse; do
   parent=kunchenguid
   case "$repo" in
     wheelhouse) parent=ImZoomBoy ;;
@@ -464,9 +465,10 @@ x-axi is not a fork, so it is a plain clone with no upstream remote, and `sync-f
 ```bash
 cd ~/github/no-mistakes && make install   # installs to $(go env GOPATH)/bin and restarts the daemon
 cd ~/github/treehouse   && make build && install -m755 treehouse ~/go/bin/treehouse
+cd ~/github/runner-up   && make build VERSION="$(git describe --tags --always)" && install -m755 runner-up ~/go/bin/runner-up
 ```
 
-treehouse gets an explicit `install` because its upstream `make install` reads the environment `GOPATH`, which is unset under launchd where `sync-forks` re-runs these commands.
+treehouse and runner-up get an explicit `install` because their upstream `make install` reads the environment `GOPATH`, which is unset under launchd where `sync-forks` re-runs these commands.
 
 **Step 4: build and link the Node tools.**
 
