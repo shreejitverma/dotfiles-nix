@@ -496,7 +496,7 @@ If you are reproducing this setup for yourself, create that private repo first w
 ic-link
 ```
 
-`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills`, `~/.codex/skills`, and (when Grok is installed) `~/.grok/skills`, the tool-neutral `~/AGENTS.md` and `~/.codex/AGENTS.md` chain, Grok's own `AGENTS.md` and agent definitions (when Gemini is installed) `~/.gemini/AGENTS.md`, and (when Muse Code is installed) its native `AGENTS.md` from `~/github/agents`, Claude subagents and rules into `~/.claude/agents` and `~/.claude/rules`, and the rest of the personal-layer links (skipped with a note if that repo is absent).
+`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills`, `~/.codex/skills`, and (when Grok is installed) `~/.grok/skills`, the tool-neutral `~/AGENTS.md` and `~/.codex/AGENTS.md` chain, Grok's own `AGENTS.md` and agent definitions, (when Gemini is installed) `~/.gemini/AGENTS.md`, and (when Muse Code is installed) its native `AGENTS.md` from `~/github/agents`, Claude subagents and rules into `~/.claude/agents` and `~/.claude/rules`, and the rest of the personal-layer links (skipped with a note if that repo is absent).
 It links one file at a time and never writes into a real file or directory it did not create, so a skill installed by `npx skills`, a subagent made with `/agents`, or a hand-written rule is left alone with a warning.
 Rerun it any time; it repairs stale links in place.
 

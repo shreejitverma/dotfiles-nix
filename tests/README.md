@@ -98,7 +98,7 @@ The fleet manifest, `gh` behaviour, and desktop notifications are the suite's st
 ## ic_link_test.sh
 
 Runs the real `files/bin/ic-link` against fake `$HOME` directories under one scratch sandbox and asserts the resulting link state with `readlink`, never the script's source.
-Nothing is stubbed: `ic-link` only creates symlinks under `$HOME`, so re-homing it is the whole isolation.
+Nothing is stubbed: `ic-link` only creates symlinks under `$HOME` and Muse's `$XDG_CONFIG_HOME/muse`, so re-homing it and unsetting `XDG_CONFIG_HOME` (so it falls back under the fake `HOME`) is the whole isolation.
 Each scenario seeds a fake `~/github/agents` with `AGENTS.md` (the tool-neutral build), `CLAUDE.md`, `GEMINI.md`, `GROK.md`, `MUSE.md`, and two agent definitions, unless the scenario is about one of them being absent.
 It also seeds a `grok/config.toml` there, which the real agents repo deliberately does not version: it is a stray that `ic-link` must ignore, so seeding it is what proves the file is skipped by rule rather than only because no copy happens to exist.
 
@@ -126,6 +126,7 @@ It covers:
 
 Runs the real `files/bin/ic-doctor` against fake `$HOME` directories and asserts only the C++ lint-tool lines of section 3 (cut between the `[3/7]` and `[4/7]` headers, macOS only), section 6 (auth, cut between the `[6/7]` and `[7/7]` headers), and section 7 (cut from the `[7/7]` header).
 The other sections still run against the fake `HOME` and the host, and may FAIL there; that is expected and not asserted.
+The suite unsets `XDG_CONFIG_HOME` so the Muse check resolves its config directory under the fake `HOME` rather than the real one.
 There are two stubs, both planted inside the fake `HOME` on the PATH `ic-doctor` builds for itself (`ic_default_path`): a fake `grok` executable that prints a version line, at `~/.local/bin/grok` or `~/go/bin/grok`, and a fake `quota-axi` at `~/.local/bin/quota-axi` that prints either a readable quota row or attention lines only, so section 6 needs no live provider.
 That PATH also includes host directories outside the fake `HOME`, so a real `grok` installed somewhere like `/opt/homebrew/bin` on the host would show up as a second copy; the suite does not mask that.
 

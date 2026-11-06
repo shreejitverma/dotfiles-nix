@@ -213,6 +213,7 @@ seed_agents_repo "$home"
 mkdir -p "$home/.config/muse"
 printf '%s\n' '{"meta":"credential"}' >"$home/.config/muse/auth.json"
 run_link "$home"
+# shellcheck disable=SC2088  # a literal ~ in the assertion label, not a path
 assert_eq "$(readlink "$home/.config/muse/AGENTS.md")" "$home/github/agents/MUSE.md" \
   "~/.config/muse/AGENTS.md points at Muse's own manual"
 assert_eq "$(cat "$home/.config/muse/auth.json")" '{"meta":"credential"}' \
