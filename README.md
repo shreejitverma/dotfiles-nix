@@ -327,7 +327,7 @@ Every tool reads its own manual, and no tool reads another's.
 `~/.claude/CLAUDE.md` is Claude Code's, and `~/AGENTS.md` carries the tool-neutral build that Codex and every other `AGENTS.md` reader resolves to.
 The "Default development system" section each of them carries makes firstmate the default entry point for all AI work and this toolchain the default for every development request.
 An agent in a plain session outside firstmate points at `fm` once before working directly.
-Grok Build and Gemini have their own files too, versioned next to Claude's in the private agents repo:
+Grok Build, Gemini, and Muse Code have their own files too, versioned next to Claude's in the private agents repo:
 
 ```text
 ~/AGENTS.md                 -> ~/github/agents/AGENTS.md   (tool-neutral)
@@ -337,9 +337,10 @@ Grok Build and Gemini have their own files too, versioned next to Claude's in th
 ~/.grok/agents/<name>.md    -> ~/github/agents/grok/agents/<name>.md
 ~/.grok/skills/<name>       -> ../../.agents/skills/<name>
 ~/.gemini/AGENTS.md         -> ~/github/agents/GEMINI.md   (only when ~/.gemini exists)
+~/.config/muse/AGENTS.md    -> ~/github/agents/MUSE.md     (only when Muse's config directory exists)
 ```
 
-`CLAUDE.md`, `GROK.md` and `GEMINI.md` are the per-tool builds and `AGENTS.md` is the tool-neutral one, all generated in that repo from one shared source.
+`CLAUDE.md`, `GROK.md`, `GEMINI.md` and `MUSE.md` are the per-tool builds and `AGENTS.md` is the tool-neutral one, all generated in that repo from one shared source.
 Edit `CORE.md`, `ROUTING.md` or `tools/<tool>.md` there and run its `bin/build-manuals`; never hand-edit a generated manual.
 `ic-link` never points `~/.grok/AGENTS.md` at Claude's file, never creates `~/.grok` (the Grok installer owns that directory), and never touches `~/.grok/hooks/` (firstmate owns the turn-end hook).
 `~/.grok/config.toml` is deliberately not linked: Grok owns that file and rewrites it in place, which replaces any symlink with a regular file.
@@ -347,6 +348,8 @@ Edit `CORE.md`, `ROUTING.md` or `tools/<tool>.md` there and run its `bin/build-m
 The intended Grok settings are recorded in the agents repo README rather than as a versioned copy of that file.
 Gemini is wired the same way, with one addition: `~/.gemini/GEMINI.md` is Gemini's own memory file, written by `/memory add`, so it is never linked or replaced, and the manual goes to `~/.gemini/AGENTS.md` instead.
 Gemini loads it only when `context.fileName` in `~/.gemini/settings.json` lists `AGENTS.md`, which `ic-doctor` checks and `ic-link` never writes, because that file is Gemini's to own.
+Muse Code reads its native personal rules from `$XDG_CONFIG_HOME/muse/AGENTS.md` and otherwise falls back to `~/.claude/CLAUDE.md`, Claude's tuning included, so `ic-link` links `MUSE.md` there.
+`ic-link` never creates Muse's config directory, never touches `auth.json` or `settings.json` in it, and never replaces a hand-written `AGENTS.md`, which `ic-doctor` reports as a warning rather than a FAIL.
 Cursor is not installed on this machine; when it is, point its User Rules at `~/AGENTS.md` (or symlink a project's `.cursor/rules` to it) to join the same system.
 
 The personal layer itself is version controlled in a **private** repo, `~/github/agents`, so nothing exists only as loose files in the home directory:
@@ -355,6 +358,7 @@ The personal layer itself is version controlled in a **private** repo, `~/github
 ~/.claude/CLAUDE.md      -> ~/github/agents/CLAUDE.md
 ~/.grok/AGENTS.md        -> ~/github/agents/GROK.md
 ~/.gemini/AGENTS.md      -> ~/github/agents/GEMINI.md
+~/.config/muse/AGENTS.md -> ~/github/agents/MUSE.md
 ~/OPINIONS.md            -> ~/github/agents/OPINIONS.md
 ~/VOICE.md               -> ~/github/agents/VOICE.md
 ~/.claude/settings.json  -> ~/github/agents/claude/settings.json
@@ -482,7 +486,7 @@ done
 ```
 
 **Step 5: clone the private personal layer.**
-The agent operating manuals (the tool-neutral `AGENTS.md` and the per-tool `CLAUDE.md`, `GROK.md`, and `GEMINI.md`, each carrying the "Default development system" section), `OPINIONS.md`, `VOICE.md`, and Claude settings live in a private repo so they are version controlled without being published:
+The agent operating manuals (the tool-neutral `AGENTS.md` and the per-tool `CLAUDE.md`, `GROK.md`, `GEMINI.md`, and `MUSE.md`, each carrying the "Default development system" section), `OPINIONS.md`, `VOICE.md`, and Claude settings live in a private repo so they are version controlled without being published:
 
 ```bash
 git clone https://github.com/<you>/agents.git ~/github/agents
@@ -496,7 +500,7 @@ If you are reproducing this setup for yourself, create that private repo first w
 ic-link
 ```
 
-`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills`, `~/.codex/skills`, and (when Grok is installed) `~/.grok/skills`, the tool-neutral `~/AGENTS.md` and `~/.codex/AGENTS.md` chain, Grok's own `AGENTS.md` and agent definitions and (when Gemini is installed) `~/.gemini/AGENTS.md` from `~/github/agents`, Claude subagents and rules into `~/.claude/agents` and `~/.claude/rules`, and the rest of the personal-layer links (skipped with a note if that repo is absent).
+`ic-link` (in `files/bin`, on `PATH`) is the idempotent, versioned recipe for the whole farm: skill links into `~/.agents/skills`, mirrors into `~/.claude/skills`, `~/.codex/skills`, and (when Grok is installed) `~/.grok/skills`, the tool-neutral `~/AGENTS.md` and `~/.codex/AGENTS.md` chain, Grok's own `AGENTS.md` and agent definitions, (when Gemini is installed) `~/.gemini/AGENTS.md`, and (when Muse Code is installed) its native `AGENTS.md` from `~/github/agents`, Claude subagents and rules into `~/.claude/agents` and `~/.claude/rules`, and the rest of the personal-layer links (skipped with a note if that repo is absent).
 It links one file at a time and never writes into a real file or directory it did not create, so a skill installed by `npx skills`, a subagent made with `/agents`, or a hand-written rule is left alone with a warning.
 Rerun it any time; it repairs stale links in place.
 
@@ -563,7 +567,7 @@ npx skills add <owner>/<repo> --skill <name> -g   # -g = all projects (~/.claude
 ic-doctor
 ```
 
-`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`, plus on macOS the linked C++ lint tools (a warning, since only C++ work needs them); every skill symlink in both directories; the daily sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md` and the tool-neutral manual behind it, codex `AGENTS.md` and skills, Grok's separate `AGENTS.md`, skills, and agent definitions, plus the `grok` binary resolving to `~/.local/bin/grok` with no second copy on `PATH`, and Gemini's `~/.gemini/AGENTS.md` with the `context.fileName` entry that loads it).
+`ic-doctor` (in `files/bin`, already on `PATH`) is a read-only check with seven sections: this checkout's path against the `dotfilesDir` declared in the entry module for the detected platform, plus the app-config symlinks and shell hook that path feeds; every fork's clone, remotes, branch, and cleanliness; every binary's presence and `--version`, plus on macOS the linked C++ lint tools (a warning, since only C++ work needs them); every skill symlink in both directories; the daily sync schedule (launchd agent on macOS, systemd user timer on Linux) and its last log line; `gh` plus quota-axi auth; and the cross-tool default chain (`~/AGENTS.md` and the tool-neutral manual behind it, codex `AGENTS.md` and skills, Grok's separate `AGENTS.md`, skills, and agent definitions, plus the `grok` binary resolving to `~/.local/bin/grok` with no second copy on `PATH`, Gemini's `~/.gemini/AGENTS.md` with the `context.fileName` entry that loads it, and Muse's native `AGENTS.md`).
 A `~/.grok/AGENTS.md` or `~/.gemini/AGENTS.md` that points anywhere other than its own tool's manual is a FAIL naming the actual target, reported whether or not that manual or the agents repo exists, because one tool silently loading another tool's operating manual is the fault this layer exists to prevent.
 A `~/AGENTS.md` still resolving to `~/.claude/CLAUDE.md` while the neutral build exists is the same FAIL; that target is only `ok` when the agents repo is absent, since there is then no neutral manual to point at.
 Agent definitions are optional: an agents repo with no `grok/agents/*.md` is only a warning, while a definition that exists but is not linked is a FAIL.

@@ -29,6 +29,10 @@
 #     been made a symlink, or when a linked manual is not listed in
 #     context.fileName, while never blaming context.fileName where no manual is
 #     linked at all
+#   - skip Muse checks when its config directory is absent, accept its native
+#     AGENTS.md linked to MUSE.md, warn without failing on a hand-written one,
+#     and fail when it is missing, points at another manual, or MUSE.md is
+#     missing from the repo
 #   - report the section 6 claude quota read as ok only for a real quota row
 #     with a numeric percentage, and warn on attention lines alone
 #   - check Claude subagent and rule links from ~/github/agents, including
@@ -47,6 +51,9 @@ set -uo pipefail
 
 REPO_ROOT="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && cd .. && pwd)"
 SANDBOX="$(mktemp -d "${TMPDIR:-/tmp}/ic-doctor-test.XXXXXX")"
+# ic-doctor resolves Muse's config directory through XDG_CONFIG_HOME, so an
+# inherited value would point the sandboxed run at the real one.
+unset XDG_CONFIG_HOME
 # The same set ic-doctor derives: skills from other repos plus files/skills.
 # shellcheck source=../setup/lib/skills.sh
 . "$REPO_ROOT/setup/lib/skills.sh"
@@ -130,6 +137,7 @@ plant_wiring() {
   printf '%s\n' '# Claude operating manual' '## Default development system' >"$repo/CLAUDE.md"
   printf '%s\n' '# Tool-neutral manual' '## Default development system' >"$repo/AGENTS.md"
   printf '%s\n' '# Gemini operating manual' '## Default development system' >"$repo/GEMINI.md"
+  printf '%s\n' '# Muse operating manual' '## Default development system' >"$repo/MUSE.md"
   printf '%s\n' '# Grok operating manual' '## Default development system' >"$repo/GROK.md"
   printf '%s\n' 'opinions' >"$repo/OPINIONS.md"
   printf '%s\n' 'voice' >"$repo/VOICE.md"
@@ -155,6 +163,13 @@ plant_gemini() {
   printf '%s\n' '## Gemini Added Memories' >"$home/.gemini/GEMINI.md"
   printf '%s\n' '{"context": {"fileName": ["AGENTS.md", "GEMINI.md"]}}' >"$home/.gemini/settings.json"
   ln -sfn "$home/github/agents/GEMINI.md" "$home/.gemini/AGENTS.md"
+}
+
+plant_muse() {
+  local home="$1"
+  mkdir -p "$home/.config/muse"
+  printf '%s\n' '{"meta":"credential"}' >"$home/.config/muse/auth.json"
+  ln -sfn "$home/github/agents/MUSE.md" "$home/.config/muse/AGENTS.md"
 }
 
 run_section7() {
@@ -425,6 +440,68 @@ ln -sfn ".claude/CLAUDE.md" "$home/AGENTS.md"
 section=$(run_section7 "$home")
 assert_grep "$section" 'FAIL  ~/AGENTS.md is missing or dangles, so Codex reads nothing \(run: ~/github/agents/bin/build-manuals, then ic-link\)' \
   "names build-manuals when only Claude's manual is generated, since ic-link cannot make a neutral one"
+
+# --- skip when Muse is not installed ---
+home=$(new_home muse-absent)
+plant_wiring "$home"
+section=$(run_section7 "$home")
+assert_grep "$section" "warn  muse not set up \\($home/\\.config/muse absent\\); skipping" \
+  "skips Muse checks when its config directory is absent"
+assert_not_grep "$section" 'FAIL  muse' \
+  "does not FAIL muse checks when Muse is not installed"
+
+# --- healthy Muse wiring ---
+home=$(new_home muse-healthy)
+plant_wiring "$home"
+plant_muse "$home"
+section=$(run_section7 "$home")
+assert_grep "$section" "ok    muse: $home/\\.config/muse/AGENTS\\.md -> agents/MUSE\\.md" \
+  "accepts Muse's native AGENTS.md linked to Muse's own manual"
+assert_grep "$section" 'ok    MUSE.md declares the default development system' \
+  "checks the routing section in the manual Muse loads"
+assert_not_grep "$section" 'FAIL  muse' \
+  "does not FAIL muse checks when the manual is linked"
+
+# --- manual not linked: Muse falls back to Claude's manual ---
+home=$(new_home muse-manual-unlinked)
+plant_wiring "$home"
+plant_muse "$home"
+rm "$home/.config/muse/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" "FAIL  muse: $home/\\.config/muse/AGENTS\\.md is missing, so Muse falls back to Claude's manual \\(run: ic-link\\)" \
+  "fails naming the fix when Muse's native AGENTS.md is missing"
+
+# --- a link at another tool's manual is a FAIL ---
+home=$(new_home muse-claude-pointer)
+plant_wiring "$home"
+plant_muse "$home"
+ln -sfn "$home/.claude/CLAUDE.md" "$home/.config/muse/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" "FAIL  muse: $home/\\.config/muse/AGENTS\\.md points at $home/\\.claude/CLAUDE\\.md, not ~/github/agents/MUSE\\.md \\(run: ic-link\\)" \
+  "fails naming Claude's manual when Muse's AGENTS.md points at it"
+assert_line_count "$section" 'FAIL .*muse/AGENTS\.md' 1 \
+  "a mislinked Muse AGENTS.md yields exactly one FAIL line"
+
+# --- a hand-written native file is the user's own rules: warn, never FAIL ---
+home=$(new_home muse-hand-written)
+plant_wiring "$home"
+plant_muse "$home"
+rm "$home/.config/muse/AGENTS.md"
+printf '%s\n' '# my own muse rules' >"$home/.config/muse/AGENTS.md"
+section=$(run_section7 "$home")
+assert_grep "$section" "warn  muse: $home/\\.config/muse/AGENTS\\.md is a hand-written file" \
+  "warns when Muse's AGENTS.md is a hand-written file"
+assert_not_grep "$section" 'FAIL  muse' \
+  "does not FAIL a hand-written Muse AGENTS.md"
+
+# --- MUSE.md missing from the agents repo ---
+home=$(new_home muse-no-manual)
+plant_wiring "$home"
+plant_muse "$home"
+rm "$home/github/agents/MUSE.md"
+section=$(run_section7 "$home")
+assert_grep "$section" "FAIL  muse: $home/github/agents/MUSE\\.md missing, so there is no manual to link \\(run: ~/github/agents/bin/build-manuals, then ic-link\\)" \
+  "fails naming build-manuals when the agents repo lacks MUSE.md"
 
 # --- skip when Gemini is not installed ---
 home=$(new_home gemini-absent)

@@ -7,7 +7,7 @@
 #     ~/.codex/skills, and ~/.grok/skills (when Grok is installed); every
 #     directory under files/skills is one of them, found by setup/lib/skills.sh
 #   - the cross-tool instruction chain (~/AGENTS.md, ~/.codex/AGENTS.md),
-#     plus each tool's own manual for Grok and Gemini
+#     plus each tool's own manual for Grok, Gemini, and Muse Code
 #   - Grok's own AGENTS.md and agent definitions (never Claude's)
 #   - the personal layer from the private ~/github/agents repo, if present,
 #     including Claude subagents (~/.claude/agents) and rules (~/.claude/rules)
@@ -173,6 +173,24 @@ if [ -d "$HOME/.gemini" ] && [ "$personal_layer" -eq 1 ]; then
     ln -sf "$AGENTS_REPO/GEMINI.md" "$HOME/.gemini/AGENTS.md"
   else
     echo "ic-link: warning: $AGENTS_REPO/GEMINI.md missing; not pointing ~/.gemini/AGENTS.md at another tool's manual" >&2
+  fi
+fi
+
+# 7. Muse Code: its own manual as Muse's native personal rules file.
+# Muse owns $XDG_CONFIG_HOME/muse (auth.json, settings.json); never create that
+# directory or touch anything else in it. A native AGENTS.md there replaces
+# Muse's fallback of loading ~/.claude/CLAUDE.md, and it is the only personal
+# rules file firstmate's Muse privacy switch leaves in place for crewmates. A
+# real (non-symlink) AGENTS.md is the user's own hand-written rules, so it is
+# never replaced.
+MUSE_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/muse"
+if [ -d "$MUSE_CONFIG_DIR" ] && [ "$personal_layer" -eq 1 ]; then
+  if [ ! -f "$AGENTS_REPO/MUSE.md" ]; then
+    echo "ic-link: warning: $AGENTS_REPO/MUSE.md missing; not pointing $MUSE_CONFIG_DIR/AGENTS.md at another tool's manual" >&2
+  elif [ -e "$MUSE_CONFIG_DIR/AGENTS.md" ] && [ ! -L "$MUSE_CONFIG_DIR/AGENTS.md" ]; then
+    echo "ic-link: warning: $MUSE_CONFIG_DIR/AGENTS.md is a real file; leaving it in place (move it aside, then rerun ic-link to link MUSE.md)" >&2
+  else
+    ln -sfn "$AGENTS_REPO/MUSE.md" "$MUSE_CONFIG_DIR/AGENTS.md"
   fi
 fi
 

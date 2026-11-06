@@ -98,8 +98,8 @@ The fleet manifest, `gh` behaviour, and desktop notifications are the suite's st
 ## ic_link_test.sh
 
 Runs the real `files/bin/ic-link` against fake `$HOME` directories under one scratch sandbox and asserts the resulting link state with `readlink`, never the script's source.
-Nothing is stubbed: `ic-link` only creates symlinks under `$HOME`, so re-homing it is the whole isolation.
-Each scenario seeds a fake `~/github/agents` with `AGENTS.md` (the tool-neutral build), `CLAUDE.md`, `GEMINI.md`, `GROK.md`, and two agent definitions, unless the scenario is about one of them being absent.
+Nothing is stubbed: `ic-link` only creates symlinks under `$HOME` and Muse's `$XDG_CONFIG_HOME/muse`, so re-homing it and unsetting `XDG_CONFIG_HOME` (so it falls back under the fake `HOME`) is the whole isolation.
+Each scenario seeds a fake `~/github/agents` with `AGENTS.md` (the tool-neutral build), `CLAUDE.md`, `GEMINI.md`, `GROK.md`, `MUSE.md`, and two agent definitions, unless the scenario is about one of them being absent.
 It also seeds a `grok/config.toml` there, which the real agents repo deliberately does not version: it is a stray that `ic-link` must ignore, so seeding it is what proves the file is skipped by rule rather than only because no copy happens to exist.
 
 It covers:
@@ -112,6 +112,11 @@ It covers:
 - `~/.gemini` absent, where `ic-link` must not create it (the Gemini installer owns that directory)
 - `~/.gemini` present, where `~/.gemini/AGENTS.md` must point at `GEMINI.md` while `~/.gemini/GEMINI.md`, Gemini's own memory file, stays a real file with its content untouched
 - an agents repo without `GEMINI.md`, where no `~/.gemini/AGENTS.md` link may be created at all rather than falling back to another tool's manual
+- `~/.config/muse` absent, where `ic-link` must not create it (Muse owns its config directory)
+- `~/.config/muse` present, where `AGENTS.md` there must point at `MUSE.md` while Muse's `auth.json` stays untouched, and a second run keeps the link
+- a custom `XDG_CONFIG_HOME`, where the Muse link follows it as Muse does and `~/.config/muse` is left alone
+- a hand-written Muse `AGENTS.md`, which must keep its content and never become a link, with a warning naming it
+- an agents repo without `MUSE.md`, where no Muse `AGENTS.md` link may be created at all, with a warning naming the missing source
 - an agents repo without `GROK.md`, where `ic-link` must exit 0, warn, leave a preexisting `~/.grok/AGENTS.md` in place, and never fall back to Claude's file
 - every skill under `files/skills` in the invoking checkout, which must link into the declared `dotfilesDir` (not the invoking tree) and be mirrored for Claude and Grok; the list comes from `setup/lib/skills.sh`, the same helper `ic-link` uses, so the scenario needs no edit when a skill is added
 - a real directory where a skill link belongs (as `npx skills` leaves one), which `ic-link` must warn about and leave untouched rather than creating a link inside it
@@ -121,6 +126,7 @@ It covers:
 
 Runs the real `files/bin/ic-doctor` against fake `$HOME` directories and asserts only the C++ lint-tool lines of section 3 (cut between the `[3/7]` and `[4/7]` headers, macOS only), section 6 (auth, cut between the `[6/7]` and `[7/7]` headers), and section 7 (cut from the `[7/7]` header).
 The other sections still run against the fake `HOME` and the host, and may FAIL there; that is expected and not asserted.
+The suite unsets `XDG_CONFIG_HOME` so the Muse check resolves its config directory under the fake `HOME` rather than the real one.
 There are two stubs, both planted inside the fake `HOME` on the PATH `ic-doctor` builds for itself (`ic_default_path`): a fake `grok` executable that prints a version line, at `~/.local/bin/grok` or `~/go/bin/grok`, and a fake `quota-axi` at `~/.local/bin/quota-axi` that prints either a readable quota row or attention lines only, so section 6 needs no live provider.
 That PATH also includes host directories outside the fake `HOME`, so a real `grok` installed somewhere like `/opt/homebrew/bin` on the host would show up as a second copy; the suite does not mask that.
 
@@ -150,6 +156,12 @@ It covers:
 - `~/.gemini/AGENTS.md` not linked: FAIL naming the source it should point at
 - `~/.gemini/AGENTS.md` pointing at Claude's manual: exactly one FAIL line, naming the actual target; the same FAIL must still appear when `~/github/agents` is not cloned at all, which is the state every hand-made link is in and the one the repo guard used to hide, and there it is the only Gemini FAIL, printed beside the repo-absent warning, whose wording says what was not checked rather than claiming no manual is linked, which would contradict it. Its remedy names the clone to do first, since `bin/build-manuals` is not on disk until the repo is there
 - an agents repo without `GEMINI.md`: exactly one Gemini FAIL, naming the missing source rather than blaming the link
+- Muse's config directory absent: one skip warning and no Muse FAIL
+- healthy Muse wiring: its native `AGENTS.md` linked to `MUSE.md` and the `Default development system` section in `MUSE.md` are both `ok`, with no Muse FAIL
+- Muse's native `AGENTS.md` missing: FAIL naming `ic-link`, since Muse then falls back to Claude's manual
+- Muse's native `AGENTS.md` pointing at Claude's manual: exactly one FAIL line, naming the actual target
+- a hand-written Muse `AGENTS.md`: a warning and no FAIL, since it is the user's own rules and `ic-link` never replaces it
+- an agents repo without `MUSE.md`: FAIL naming `bin/build-manuals`
 - `context.fileName` not listing `AGENTS.md` while a manual is linked: FAIL naming the hand step that fixes it, since the link alone never loads; `ic-doctor` checks that setting because `settings.json` is Gemini's file to own and `ic-link` never writes it, so this is the one state every `ic-link`-wired machine starts in
 - Gemini installed with `~/github/agents` not cloned, both with a settings file that has no `AGENTS.md` entry and with no settings file at all (the two states a fresh Gemini install is actually in): exactly one Gemini warning and no Gemini FAIL, since `ic-link` deliberately links nothing there and a check about the linked manual never loading would contradict the warning above it; the same holds for a cloned repo with no `GEMINI.md`, which yields only the missing-source FAIL naming `bin/build-manuals`, since that manual is generated and must not be hand-written
 - a hand-made `~/.gemini/AGENTS.md` pointing at the manual an uncloned repo would provide: a warning naming that dangling target, and exactly one Gemini line. The repo-absent warning is always emitted, so Gemini can never be the one tool that says nothing at all about a broken manual link; it reports what was not checked rather than asserting a link state, so it does not contradict a mislink FAIL above it

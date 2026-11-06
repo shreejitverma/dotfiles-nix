@@ -13,9 +13,10 @@
 #   6. auth (gh, quota-axi keychain access)
 #   7. cross-tool defaults (~/AGENTS.md chain, codex AGENTS.md and skills,
 #      grok AGENTS.md / agent definitions / skills / binary,
-#      gemini AGENTS.md and its context.fileName setting), plus the personal
-#      layer: Claude subagents and rules links, every hook script that
-#      claude/settings.json runs, and whether the generated manuals are current
+#      gemini AGENTS.md and its context.fileName setting, muse AGENTS.md),
+#      plus the personal layer: Claude subagents and rules links, every hook
+#      script that claude/settings.json runs, and whether the generated
+#      manuals are current
 #
 # Read-only: it never mutates anything. Exits non-zero if any check FAILs;
 # warns are informational and do not affect the exit code.
@@ -417,6 +418,41 @@ if [ -d "$HOME/.gemini" ]; then
   fi
 else
   warn "gemini not set up (~/.gemini absent); skipping"
+fi
+# Muse Code reads its native personal rules from $XDG_CONFIG_HOME/muse/AGENTS.md
+# and otherwise falls back to ~/.claude/CLAUDE.md, Claude's tuning included.
+# A real file there is the user's own rules, which ic-link never replaces, so
+# it is reported rather than failed.
+muse_config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/muse"
+if [ -d "$muse_config_dir" ]; then
+  if [ -f "$GH_ROOT/agents/MUSE.md" ]; then
+    muse_manual_fix="run: ic-link"
+  elif [ -d "$GH_ROOT/agents" ]; then
+    muse_manual_fix="run: ~/github/agents/bin/build-manuals, then ic-link"
+  else
+    muse_manual_fix="clone ~/github/agents, then run: ic-link"
+  fi
+  muse_manual=$(readlink "$muse_config_dir/AGENTS.md" 2>/dev/null)
+  if [ -e "$muse_config_dir/AGENTS.md" ] && [ ! -L "$muse_config_dir/AGENTS.md" ]; then
+    warn "muse: $muse_config_dir/AGENTS.md is a hand-written file, so Muse loads it instead of ~/github/agents/MUSE.md (move it aside, then $muse_manual_fix)"
+  elif [ -n "$muse_manual" ] && [ "$muse_manual" != "$GH_ROOT/agents/MUSE.md" ]; then
+    bad "muse: $muse_config_dir/AGENTS.md points at $muse_manual, not ~/github/agents/MUSE.md ($muse_manual_fix)"
+  elif [ ! -d "$GH_ROOT/agents" ]; then
+    warn "muse: private agents repo not cloned (~/github/agents); manual not checked"
+  elif [ ! -f "$GH_ROOT/agents/MUSE.md" ]; then
+    bad "muse: $GH_ROOT/agents/MUSE.md missing, so there is no manual to link ($muse_manual_fix)"
+  elif [ "$muse_manual" = "$GH_ROOT/agents/MUSE.md" ]; then
+    ok "muse: $muse_config_dir/AGENTS.md -> agents/MUSE.md"
+    if grep -q "Default development system" "$GH_ROOT/agents/MUSE.md" 2>/dev/null; then
+      ok "MUSE.md declares the default development system"
+    else
+      bad "MUSE.md missing the 'Default development system' section"
+    fi
+  else
+    bad "muse: $muse_config_dir/AGENTS.md is missing, so Muse falls back to Claude's manual ($muse_manual_fix)"
+  fi
+else
+  warn "muse not set up ($muse_config_dir absent); skipping"
 fi
 if [ -d "$GH_ROOT/agents" ]; then
   agents_bad=""
